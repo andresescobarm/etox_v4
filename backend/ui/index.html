@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Etox — Texto sobre Imágenes</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Etox — Editor de Texto sobre Imágenes</h1>
+    </header>
+
+    <main class="columns">
+      <!-- Left column: dynamic controls -->
+      <section class="col col-left" aria-label="Controls">
+        <div class="panel">
+          <label for="templateSelect" class="label">Template</label>
+          <select id="templateSelect" class="input"></select>
+        </div>
+
+        <div class="panel">
+          <label class="label">Foto</label>
+          <input id="imageInput" type="file" accept="image/*" />
+          <div class="help">Sube la imagen con la que quieres trabajar.</div>
+        </div>
+
+        <div id="areasContainer"></div>
+
+        <div class="panel panel-actions">
+          <button id="renderBtn" class="btn btn-render">Preview</button>
+          <button id="downloadBtn" class="btn btn-download">Descargar</button>
+        </div>
+
+        <!-- Languages panel -->
+        <div class="panel panel-languages" id="languagesPanel" aria-label="Language selection">
+          <div class="label-row" style="margin-bottom:8px;">
+            <div class="label" style="font-weight:700;">Languages</div>
+            <div style="display:flex;gap:16px;align-items:center;">
+              <button id="selectAllLang" class="btn small">Seleccionar Todos</button>
+              <button id="clearAllLang" class="btn small">Eliminar Todos</button>
+            </div>
+          </div>
+
+          <div id="languagesGrid" class="languages-grid" role="group" aria-label="Available languages"></div>
+
+          <div id="selectedLangsSummary" class="langs-summary" aria-live="polite" style="margin-top:10px;"></div>
+
+          <div class="help" style="margin-top:10px;">Selecciona uno o más idiomas. Usa Seleccionar Todos / Eliminar Todos para tu conveniencia. Nota: El original en Español (es) será incluido siempre en el ZIP.</div>
+        </div>
+
+        <div class="panel panel-diagnostics" id="diagnosticsPanel" hidden>
+          <h3>Diagnostics</h3>
+          <pre id="diagnosticsOutput" class="diag"></pre>
+          <button id="closeDiag" class="btn small">Close</button>
+        </div>
+      </section>
+
+      <div class="divider" aria-hidden="true"></div>
+
+      <!-- Right column: preview -->
+      <section class="col col-right" aria-label="Preview">
+        <div class="preview-wrap">
+          <div class="preview-frame" id="previewFrame">
+            <div class="preview-box" id="previewBox">
+              <img id="previewImg" alt="Preview" src="" style="object-fit:contain;" />
+              <div id="previewPlaceholder" class="placeholder">Aquí verás tu Preview</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <small class="muted">Etox - Upsomedia</small>
+    </footer>
+  </div>
+
+  <!-- Filename modal -->
+  <div id="filenameModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="filenameModalTitle">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+    <div class="modal-dialog modal-naming" role="document">
+      <h3 id="filenameModalTitle">Descarga de imágenes</h3>
+
+      <p class="muted" style="margin-top:6px;margin-bottom:var(--modal-gap,16px);">
+        El nombre de los archivos tendrá la siguiente estructura:<br/>
+        &lt;nombrebase&gt;_&lt;abridioma&gt;.png (e.g. nombrebase_es.png)
+      </p>
+
+      <p class="muted" style="margin:0 0 var(--modal-gap,16px) 0;">
+        El original en español (es) siempre está incluido.
+      </p>
+
+      <label class="label" for="filenameInput">Nombre del archivo:</label>
+      <input id="filenameInput" class="input modal-filename-input" type="text" placeholder="image" />
+
+      <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="filenameCancelBtn" class="btn small">Cancelar</button>
+        <button id="filenameSaveBtn" class="btn btn-download">Descargar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress modal -->
+  <div id="progressModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="progressModalTitle">
+    <div class="modal-backdrop" id="progressBackdrop"></div>
+    <div class="modal-dialog modal-progress" role="document">
+      <h3 id="progressModalTitle">Preparando archivos</h3>
+      <p class="muted progress-message" style="margin-top:0;margin-bottom:12px;">Estamos creando tu archivo ZIP. Esto puede tardar unos segundos.</p>
+
+      <div class="progress-bar-outer" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="progressBar" class="progress-bar-inner" style="width:0%"></div>
+      </div>
+
+      <div class="progress-footer" style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+        <div id="progressPercent" class="muted">0%</div>
+        <div style="display:flex;gap:8px;">
+          <button id="progressCancelBtn" class="btn small">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+  UI script:
+  - Loads templates from /templates
+  - Builds area panels
+  - Renders preview and download
+  Sorting change: templates dropdown now follows this fixed order:
+    A, A.1, B, B.1, C, D, D.1, E, F
+  Also: area panel labels now use area.name (from templates.json) and textarea placeholders are set.
+*/
+
+const templateSelect = document.getElementById('templateSelect');
+const areasContainer = document.getElementById('areasContainer');
+const imageInput = document.getElementById('imageInput');
+const renderBtn = document.getElementById('renderBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const diagnosticsPanel = document.getElementById('diagnosticsPanel');
+const diagnosticsOutput = document.getElementById('diagnosticsOutput');
+const closeDiag = document.getElementById('closeDiag');
+const previewImg = document.getElementById('previewImg');
+const previewPlaceholder = document.getElementById('previewPlaceholder');
+const previewBox = document.getElementById('previewBox');
+const previewFrame = document.getElementById('previewFrame');
+
+const languagesGrid = document.getElementById('languagesGrid');
+const selectAllLangBtn = document.getElementById('selectAllLang');
+const clearAllLangBtn = document.getElementById('clearAllLang');
+const selectedLangsSummary = document.getElementById('selectedLangsSummary');
+
+const filenameModal = document.getElementById('filenameModal');
+const filenameInput = document.getElementById('filenameInput');
+const filenameSaveBtn = document.getElementById('filenameSaveBtn');
+const filenameCancelBtn = document.getElementById('filenameCancelBtn');
+
+const progressModal = document.getElementById('progressModal');
+const progressBar = document.getElementById('progressBar');
+const progressPercent = document.getElementById('progressPercent');
+const progressCancelBtn = document.getElementById('progressCancelBtn');
+const progressMessage = document.querySelector('.progress-message');
+
+let templates = [];
+let currentTemplate = null;
+let currentAbortController = null;
+
+/* Helper element creator */
+function el(tag, attrs = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const k in attrs) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'text') e.textContent = attrs[k];
+    else e.setAttribute(k, attrs[k]);
+  }
+  (children || []).forEach(c => {
+    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+    else e.appendChild(c);
+  });
+  return e;
+}
+
+function showPlaceholder(show) {
+  previewImg.style.display = show ? 'none' : '';
+  previewPlaceholder.style.display = show ? '' : 'none';
+}
+
+function syncColorInputs(colorInput, hexInput) {
+  colorInput.addEventListener('input', () => {
+    hexInput.value = colorInput.value.toUpperCase();
+  });
+  hexInput.addEventListener('change', () => {
+    let v = hexInput.value.trim();
+    if (!v.startsWith('#')) v = '#' + v;
+    const ok = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v);
+    if (!ok) {
+      hexInput.value = colorInput.value.toUpperCase();
+      return;
+    }
+    colorInput.value = v;
+    hexInput.value = v.toUpperCase();
+  });
+}
+
+function createAreaPanel(area, template) {
+  const panel = el('div', { class: 'panel area-panel' });
+
+  const isTemplateCE = template && /template_(C|E)/i.test(template.id);
+  const isTemplateC = template && /template_C/i.test(template.id);
+
+  const mainTextLabelRow = el('div', { class: 'row label-row' });
+  // Use the name from the template area if present; fallback to the old static string
+  mainTextLabelRow.appendChild(el('div', { class: 'label', text: area.name || 'Texto Principal' }));
+
+  const mainColorWrap = el('div', { class: 'color-attach' });
+  const mainColorInput = el('input', { type: 'color', id: `colorWheel_${area.id}` });
+  const mainColorHex = el('input', { type: 'text', id: `colorHex_${area.id}`, class: 'input color-hex' });
+  const mainDefault = (template.allowed_colors && template.allowed_colors[0]) || '#FFFFFF';
+  mainColorInput.value = mainDefault;
+  mainColorHex.value = mainDefault;
+  syncColorInputs(mainColorInput, mainColorHex);
+  mainColorWrap.appendChild(mainColorInput);
+  mainColorWrap.appendChild(mainColorHex);
+  mainTextLabelRow.appendChild(mainColorWrap);
+
+  const mainTextArea = el('textarea', { class: 'textarea', id: `text_${area.id}` });
+  if (isTemplateC) {
+    mainTextArea.rows = 1;
+    mainTextArea.classList.add('compact-textarea');
+  } else {
+    mainTextArea.rows = 5;
+  }
+  // Set placeholder to the area's name so the user sees which box they're editing
+  mainTextArea.placeholder = area.name || '';
+  mainTextArea.value = area.get_default_text || '';
+
+  panel.appendChild(mainTextLabelRow);
+  panel.appendChild(mainTextArea);
+
+  if (!isTemplateCE) {
+    const highlightLabelRow = el('div', { class: 'row label-row' });
+    highlightLabelRow.appendChild(el('div', { class: 'label', text: 'Frase destacada (opcional)' }));
+    const highlightColorAttach = el('div', { class: 'color-attach' });
+    const highlightColorInput = el('input', { type: 'color', id: `highlightWheel_${area.id}` });
+    const highlightColorHex = el('input', { type: 'text', id: `highlightHex_${area.id}`, class: 'input color-hex' });
+    const hcDefault = area.highlight_color || '#00FF00';
+    highlightColorInput.value = hcDefault;
+    highlightColorHex.value = hcDefault;
+    syncColorInputs(highlightColorInput, highlightColorHex);
+    highlightColorAttach.appendChild(highlightColorInput);
+    highlightColorAttach.appendChild(highlightColorHex);
+    highlightLabelRow.appendChild(highlightColorAttach);
+
+    const highlightInputRow = el('div', { class: 'row' });
+    const highlightInput = el('input', { class: 'input', id: `highlight_${area.id}`, placeholder: 'phrase to highlight' });
+    highlightInputRow.appendChild(highlightInput);
+
+    panel.appendChild(highlightLabelRow);
+    panel.appendChild(highlightInputRow);
+
+    panel._highlightHex = highlightColorHex;
+  } else {
+    panel._highlightHex = undefined;
+  }
+
+  if (isTemplateCE && /_a$/.test(area.id)) {
+    const boxLabelRow = el('div', { class: 'row label-row' });
+    boxLabelRow.appendChild(el('div', { class: 'label', text: 'Box background' }));
+
+    const boxControls = el('div', { style: 'display:flex;gap:8px;align-items:center;' });
+
+    const boxEnable = el('input', { type: 'checkbox', id: `boxEnable_${area.id}` });
+    boxEnable.checked = true;
+
+    const boxColorAttach = el('div', { class: 'color-attach' });
+    const boxColorInput = el('input', { type: 'color', id: `boxColorWheel_${area.id}` });
+    const boxColorHex = el('input', { type: 'text', id: `boxColorHex_${area.id}`, class: 'input color-hex' });
+    const boxDefault = (template.allowed_colors && template.allowed_colors[0]) || '#FFFFFF';
+    boxColorInput.value = boxDefault;
+    boxColorHex.value = boxDefault;
+    syncColorInputs(boxColorInput, boxColorHex);
+
+    boxColorInput.disabled = !boxEnable.checked;
+    boxColorHex.disabled = !boxEnable.checked;
+
+    boxEnable.addEventListener('change', () => {
+      const enabled = !!boxEnable.checked;
+      boxColorInput.disabled = !enabled;
+      boxColorHex.disabled = !enabled;
+    });
+
+    boxColorAttach.appendChild(boxColorInput);
+    boxColorAttach.appendChild(boxColorHex);
+
+    boxControls.appendChild(boxEnable);
+    boxControls.appendChild(boxColorAttach);
+
+    boxLabelRow.appendChild(boxControls);
+    panel.appendChild(boxLabelRow);
+
+    panel._boxColorHex = boxColorHex;
+    panel._boxEnable = boxEnable;
+  } else {
+    panel._boxColorHex = undefined;
+    panel._boxEnable = undefined;
+  }
+
+  const fontRow = el('div', { class: 'row' });
+  const fontSize = el('input', { type: 'number', class: 'input', id: `fontSize_${area.id}`, min: 1, value: area.max_font_size || area.max_font_size || 48 });
+  fontRow.appendChild(el('div', { class: 'label', text: 'Tamaño de Fuente' }));
+  fontRow.appendChild(fontSize);
+
+  panel.appendChild(fontRow);
+
+  panel._mainColorHex = mainColorHex;
+
+  return panel;
+}
+
+/* preview frame sizing */
+function setPreviewFrameSize(template) {
+  if (!previewBox) return;
+
+  const PREVIEW_MIN_W = 360;
+  const PREVIEW_MIN_H = 360;
+  const PREVIEW_MAX_W = 560;
+  const PREVIEW_MAX_H = 720;
+
+  let canvasW = 600, canvasH = 600;
+  if (template && template.size && template.size.width && template.size.height) {
+    canvasW = template.size.width;
+    canvasH = template.size.height;
+  }
+
+  const maxFrameWidth = Math.min(820, Math.max(360, Math.round(window.innerWidth * 0.45)));
+  const scale = Math.min(maxFrameWidth / canvasW, 1);
+
+  let cssW = Math.round(canvasW * scale);
+  let cssH = Math.round(canvasH * scale);
+
+  cssW = Math.max(PREVIEW_MIN_W, Math.min(cssW, PREVIEW_MAX_W));
+  cssH = Math.max(PREVIEW_MIN_H, Math.min(cssH, PREVIEW_MAX_H));
+
+  previewBox.style.width = cssW + 'px';
+  previewBox.style.height = cssH + 'px';
+
+  previewPlaceholder.style.lineHeight = cssH + 'px';
+
+  previewImg.style.maxWidth = '100%';
+  previewImg.style.maxHeight = '100%';
+  previewImg.style.width = '100%';
+  previewImg.style.height = '100%';
+}
+
+/* Rest of app logic (templates, renders, download flow) follows the stable implementation. */
+
+/* ---------------------------
+   Sorting helpers: fixed order requested by user
+   Order: A, A.1, B, B.1, C, D, D.1, E, F
+   --------------------------- */
+const TEMPLATE_ORDER_PREFIXES = [
+  'template_A',
+  'template_A1',
+  'template_B',
+  'template_B1',
+  'template_C',
+  'template_D',
+  'template_D1',
+  'template_E',
+  'template_F'
+];
+
+function templatePrefixIndex(id) {
+  if (!id) return Infinity;
+  const low = id.toLowerCase();
+  for (let i = 0; i < TEMPLATE_ORDER_PREFIXES.length; i++) {
+    const p = TEMPLATE_ORDER_PREFIXES[i].toLowerCase();
+    if (low.startsWith(p)) return i;
+  }
+  return Infinity;
+}
+
+async function loadTemplates() {
+  try {
+    const res = await fetch('/templates');
+    if (!res.ok) throw new Error('Failed to fetch templates: ' + res.status);
+    const json = await res.json();
+    templates = json.templates || [];
+
+    // Sort templates according to TEMPLATE_ORDER_PREFIXES.
+    // If a template doesn't match any prefix, it appears after ordered ones and is sorted by name.
+    templates.sort((a, b) => {
+      const ia = templatePrefixIndex(a.id || '');
+      const ib = templatePrefixIndex(b.id || '');
+      if (ia !== ib) return ia - ib;
+      // fallback to explicit numeric order field if present
+      const oa = (typeof a.order === 'number') ? a.order : Infinity;
+      const ob = (typeof b.order === 'number') ? b.order : Infinity;
+      if (oa !== ob) return oa - ob;
+      // final fallback: alphabetical by name
+      return (a.name || a.id || '').localeCompare(b.name || b.id || '');
+    });
+
+    templateSelect.innerHTML = '';
+    if (!templates.length) {
+      templateSelect.appendChild(new Option('No templates found', ''));
+      setPreviewFrameSize(null);
+      return;
+    }
+
+    templates.forEach(t => {
+      const label = t.name || t.id || t.title || t.id;
+      const opt = new Option(label, t.id);
+      templateSelect.appendChild(opt);
+    });
+
+    // Select the first template in the sorted list (makes UI predictable)
+    const prefer = templates[0];
+    if (prefer) {
+      templateSelect.value = prefer.id;
+      buildAreaPanelsForSelected();
+      setPreviewFrameSize(prefer);
+    } else {
+      setPreviewFrameSize(null);
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Failed to load templates: ' + err.message);
+  }
+}
+
+function findTemplateById(id) {
+  return templates.find(t => t.id === id);
+}
+
+function buildAreaPanelsForSelected() {
+  const id = templateSelect.value;
+  const t = findTemplateById(id);
+  currentTemplate = t;
+  areasContainer.innerHTML = '';
+  if (!t) {
+    areasContainer.appendChild(el('div', { class: 'panel', text: 'No template selected' }));
+    setPreviewFrameSize(null);
+    return;
+  }
+  setPreviewFrameSize(t);
+  const textAreas = t.text_areas || [];
+  if (!textAreas.length) {
+    areasContainer.appendChild(el('div', { class: 'panel', text: 'Template has no text_areas defined' }));
+  } else {
+    if (/template_C/i.test(t.id)) {
+      const desired = ['left_c','left_b','left_a','right_c','right_b','right_a'];
+      desired.forEach(id => {
+        const area = textAreas.find(a => a.id === id);
+        if (area) {
+          const panel = createAreaPanel(area, t);
+          areasContainer.appendChild(panel);
+        }
+      });
+      textAreas.forEach(area => {
+        if (!desired.includes(area.id)) {
+          areasContainer.appendChild(createAreaPanel(area, t));
+        }
+      });
+    } else {
+      textAreas.forEach(area => {
+        const panel = createAreaPanel(area, t);
+        areasContainer.appendChild(panel);
+      });
+    }
+  }
+}
+
+function buildPayloadFromControls() {
+  if (!currentTemplate) return [];
+  const out = [];
+  const panels = Array.from(areasContainer.querySelectorAll('.area-panel'));
+  panels.forEach(panel => {
+    const textEl = panel.querySelector('textarea[id^="text_"]');
+    if (!textEl) return;
+    const areaId = textEl.id.replace(/^text_/, '');
+    const text = textEl.value || '';
+    const highlight_phrase = (panel.querySelector(`#highlight_${areaId}`) || { value: '' }).value || '';
+    const color = (panel._mainColorHex && panel._mainColorHex.value) ? panel._mainColorHex.value : '#000000';
+    const highlight_color = (panel._highlightHex && panel._highlightHex.value) ? panel._highlightHex.value : undefined;
+    const font_size = Number((panel.querySelector(`#fontSize_${areaId}`) || { value: '' }).value) || undefined;
+
+    const entry = {
+      area_id: areaId,
+      text,
+      color,
+      font_size
+    };
+
+    if (panel._boxEnable && panel._boxEnable.checked && panel._boxColorHex && panel._boxColorHex.value) {
+      entry.background_color = panel._boxColorHex.value;
+    }
+
+    if (highlight_phrase) {
+      entry.highlight_phrase = highlight_phrase;
+      if (highlight_color) entry.highlight_color = highlight_color;
+    }
+
+    out.push(entry);
+  });
+  return out;
+}
+
+/* ---------------------------
+   Require an uploaded image on Preview and Download
+   --------------------------- */
+async function callRender(payloadArray) {
+  const file = imageInput.files && imageInput.files[0];
+  if (!file) {
+    alert('Debes subir una imagen antes de pedir el Preview. Por favor, selecciona una imagen.');
+    return { error: 'no-image' };
+  }
+
+  const fd = new FormData();
+  fd.append('template_id', templateSelect.value);
+  fd.append('payload', JSON.stringify(payloadArray));
+  fd.append('image', file);
+
+  const res = await fetch('/render-preview', { method: 'POST', body: fd });
+  if (!res.ok) {
+    let txt;
+    try {
+      txt = await res.json();
+    } catch (e) {
+      txt = await res.text();
+    }
+    throw new Error('Render failed: ' + JSON.stringify(txt));
+  }
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    return { json: await res.json() };
+  } else if (ct.includes('image')) {
+    return { blob: await res.blob() };
+  } else {
+    return { text: await res.text() };
+  }
+}
+
+renderBtn.addEventListener('click', async () => {
+  renderBtn.disabled = true;
+  renderBtn.textContent = 'Rendering...';
+  try {
+    const payload = buildPayloadFromControls();
+    const res = await callRender(payload);
+    if (!res || res.error === 'no-image') {
+      return;
+    }
+    if (res.json) {
+      diagnosticsOutput.textContent = JSON.stringify(res.json, null, 2);
+      diagnosticsPanel.hidden = false;
+      previewImg.src = '';
+      showPlaceholder(true);
+    } else if (res.blob) {
+      const url = URL.createObjectURL(res.blob);
+      previewImg.src = url;
+      showPlaceholder(false);
+    } else {
+      diagnosticsOutput.textContent = JSON.stringify(res.text || res, null, 2);
+      diagnosticsPanel.hidden = false;
+      previewImg.src = '';
+      showPlaceholder(true);
+    }
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    renderBtn.disabled = false;
+    renderBtn.textContent = 'Render Preview';
+  }
+});
+
+/* ---------------------------
+   Languages UI (robust grid version)
+   --------------------------- */
+const LANGUAGES = [
+  { name: 'Árabe', abbr: 'ar' },
+  { name: 'Bengalí', abbr: 'bn' },
+  { name: 'Holandés', abbr: 'nl' },
+  { name: 'Inglés', abbr: 'en' },
+  { name: 'Francés', abbr: 'fr' },
+  { name: 'Alemán', abbr: 'de' },
+  { name: 'Hebreo', abbr: 'he' },
+  { name: 'Hindi', abbr: 'hi' },
+  { name: 'Indonesio', abbr: 'id' },
+  { name: 'Italiano', abbr: 'it' },
+  { name: 'Japonés', abbr: 'ja' },
+  { name: 'Malayo', abbr: 'ms' },
+  { name: 'Polaco', abbr: 'pl' },
+  { name: 'Portugués', abbr: 'pt' },
+  { name: 'Rumano', abbr: 'ro' },
+  { name: 'Sueco', abbr: 'sv' },
+  { name: 'Tagalo', abbr: 'tl' },
+  { name: 'Taiwanés', abbr: 'zh-TW' },
+  { name: 'Tailandés', abbr: 'th' },
+  { name: 'Turco', abbr: 'tr' },
+  { name: 'Ucraniano', abbr: 'uk' },
+  { name: 'Vietnamita', abbr: 'vi' }
+];
+
+function renderLanguagesGrid() {
+  if (!languagesGrid) {
+    console && console.warn && console.warn('languagesGrid element not found');
+    return;
+  }
+
+  languagesGrid.innerHTML = '';
+  languagesGrid.style.display = 'grid';
+  languagesGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+  languagesGrid.style.gap = '8px 12px';
+  languagesGrid.style.alignItems = 'center';
+  languagesGrid.style.padding = '6px 0';
+
+  LANGUAGES.forEach((L, idx) => {
+    const id = `lang_${idx}`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'lang-item';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.gap = '8px';
+    wrapper.style.padding = '6px 4px';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = id;
+    checkbox.value = L.abbr;
+    checkbox.className = 'lang-checkbox';
+
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = `${L.name} (${L.abbr})`;
+    label.className = 'lang-label';
+    label.style.color = 'var(--text-color, #eee)';
+    label.style.fontSize = '15px';
+
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(label);
+    languagesGrid.appendChild(wrapper);
+
+    checkbox.addEventListener('change', updateSelectedLanguagesSummary);
+  });
+
+  selectAllLangBtn && selectAllLangBtn.removeEventListener('click', _selectAllHandler);
+  selectAllLangBtn && selectAllLangBtn.addEventListener('click', _selectAllHandler);
+  clearAllLangBtn && clearAllLangBtn.removeEventListener('click', _clearAllHandler);
+  clearAllLangBtn && clearAllLangBtn.addEventListener('click', _clearAllHandler);
+
+  updateSelectedLanguagesSummary();
+}
+
+function _selectAllHandler(e) {
+  e && e.preventDefault && e.preventDefault();
+  const inputs = languagesGrid.querySelectorAll('input.lang-checkbox');
+  inputs.forEach(i => { i.checked = true; i.dispatchEvent(new Event('change')); });
+}
+function _clearAllHandler(e) {
+  e && e.preventDefault && e.preventDefault();
+  const inputs = languagesGrid.querySelectorAll('input.lang-checkbox');
+  inputs.forEach(i => { i.checked = false; i.dispatchEvent(new Event('change')); });
+}
+
+function getSelectedLanguages() {
+  const selected = [];
+  const inputs = languagesGrid.querySelectorAll('input.lang-checkbox');
+  inputs.forEach(i => { if (i.checked) selected.push(i.value); });
+  return selected;
+}
+
+function updateSelectedLanguagesSummary() {
+  if (!selectedLangsSummary) return;
+  selectedLangsSummary.innerHTML = '';
+  const inputs = languagesGrid.querySelectorAll('input.lang-checkbox');
+  const selected = [];
+  inputs.forEach((i, idx) => { if (i.checked) selected.push(LANGUAGES[idx]); });
+  const count = selected.length;
+  const info = el('div', { class: 'muted', text: `Seleccionados: ${count} ${count === 1 ? 'language' : 'idiomas'}` });
+  selectedLangsSummary.appendChild(info);
+  if (count > 0) {
+    const chipsWrap = el('div', { class: 'lang-chips' });
+    chipsWrap.style.display = 'flex';
+    chipsWrap.style.flexWrap = 'wrap';
+    chipsWrap.style.gap = '6px';
+    selected.forEach(L => {
+      const chip = el('span', { class: 'lang-chip', text: `${L.name} (${L.abbr})` });
+      chip.style.background = 'rgba(255,255,255,0.04)';
+      chip.style.padding = '4px 8px';
+      chip.style.borderRadius = '12px';
+      chip.style.fontSize = '12px';
+      chip.style.color = 'var(--text-color, #eee)';
+      chipsWrap.appendChild(chip);
+    });
+    const note = el('div', { class: 'muted', text: 'Nota: Español (es) siempre será incluido.' });
+    note.style.marginTop = '6px';
+    selectedLangsSummary.appendChild(chipsWrap);
+    selectedLangsSummary.appendChild(note);
+  } else {
+    selectedLangsSummary.appendChild(el('div', { class: 'muted', text: 'No hay idiomas seleccionados; solo el original en Español (es) será incluido.' }));
+  }
+}
+
+/* --- Filename modal + progress + download (render-download streaming) --- */
+function openFilenameModal() {
+  filenameInput.value = 'image';
+  filenameModal.style.display = 'block';
+  filenameModal.setAttribute('aria-hidden', 'false');
+  setTimeout(() => filenameInput.focus(), 120);
+}
+function closeFilenameModal() {
+  filenameModal.style.display = 'none';
+  filenameModal.setAttribute('aria-hidden', 'true');
+}
+downloadBtn.addEventListener('click', () => openFilenameModal());
+filenameCancelBtn?.addEventListener('click', (e) => { e.preventDefault(); closeFilenameModal(); });
+
+function openProgressModal() {
+  progressBar.style.width = '0%';
+  progressPercent.textContent = '0%';
+  progressMessage.textContent = 'Estamos creando tu ZIP. Esto puede tardar unos segundos.';
+  progressModal.style.display = 'block';
+  progressModal.setAttribute('aria-hidden', 'false');
+}
+function closeProgressModal() {
+  progressModal.style.display = 'none';
+  progressModal.setAttribute('aria-hidden', 'true');
+}
+progressCancelBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (currentAbortController) currentAbortController.abort();
+  closeProgressModal();
+});
+
+function validateBaseName(name) {
+  if (!name) return false;
+  if (/[\\/:\*\?"<>\|]/.test(name)) return false;
+  return true;
+}
+
+filenameSaveBtn?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const file = imageInput.files && imageInput.files[0];
+  if (!file) {
+    alert('Debes subir una imagen antes de descargar. Por favor, selecciona una imagen.');
+    return;
+  }
+
+  const baseNameRaw = filenameInput.value.trim();
+  if (!validateBaseName(baseNameRaw)) {
+    alert('Por favor ingresa un nombre válido sin caracteres de ruta.');
+    filenameInput.focus();
+    return;
+  }
+  const baseName = baseNameRaw || 'image';
+  const langs = getSelectedLanguages();
+
+  closeFilenameModal();
+  openProgressModal();
+
+  const payload = buildPayloadFromControls();
+  const fd = new FormData();
+  fd.append('template_id', templateSelect.value);
+  fd.append('payload', JSON.stringify(payload));
+  fd.append('languages', JSON.stringify(langs));
+  fd.append('base_name', baseName);
+  fd.append('image', file);
+
+  currentAbortController = new AbortController();
+  try {
+    const res = await fetch('/render-download', { method: 'POST', body: fd, signal: currentAbortController.signal });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error('Download failed: ' + txt);
+    }
+
+    const contentLength = res.headers.get('content-length');
+    const total = contentLength ? parseInt(contentLength, 10) : null;
+
+    if (!res.body) {
+      const blob = await res.blob();
+      downloadBlob(blob, baseName + '.zip');
+      closeProgressModal();
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    if (!total) {
+      progressBar.style.width = '100%';
+      progressBar.classList.add('indeterminate');
+      progressPercent.textContent = 'Procesando...';
+    } else {
+      progressBar.classList.remove('indeterminate');
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        received += value.length;
+        if (total) {
+          const pct = Math.round((received / total) * 100);
+          progressBar.style.width = pct + '%';
+          progressPercent.textContent = pct + '%';
+        } else {
+          progressPercent.textContent = `Preparando... ${(received / 1024).toFixed(0)}KB`;
+        }
+      }
+    }
+
+    const blob = new Blob(chunks, { type: res.headers.get('content-type') || 'application/zip' });
+    progressBar.classList.remove('indeterminate');
+    progressBar.style.width = '100%';
+    progressPercent.textContent = '100%';
+    progressMessage.textContent = 'Completado — iniciando descarga...';
+    await new Promise(r => setTimeout(r, 300));
+    downloadBlob(blob, baseName + '.zip');
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      alert('Descarga cancelada.');
+    } else {
+      alert(err.message || 'Fallo en la descarga.');
+    }
+  } finally {
+    currentAbortController = null;
+    setTimeout(() => closeProgressModal(), 600);
+  }
+});
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+closeDiag?.addEventListener('click', () => diagnosticsPanel.hidden = true);
+templateSelect.addEventListener('change', () => {
+  buildAreaPanelsForSelected();
+  const t = findTemplateById(templateSelect.value);
+  setPreviewFrameSize(t);
+});
+
+/* Bootstrap */
+loadTemplates();
+renderLanguagesGrid();
+showPlaceholder(true);
+</script>
+</body>
+</html>
