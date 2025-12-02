@@ -1,0 +1,18 @@
+2025-11-25 20:02:52 warning: produced text appears not to be in bn script. Retrying once.
+2025-11-25 20:02:54 error: retry also not in bn script. Marking INVALID_LANGUAGE. produced='এভ্রিল ল্যাভিন তার প্রথম মদ উপস্থাপন করলেন যার নাম ব্যানশি কমপ্লিকেটেড, তার ২০০২ সালের সফল একক গানের সম্মানে।' retry='এভ্রিল ল্যাভিন তার প্রথম মদ উপস্থাপন করলেন যার নাম ব্যানশি কমপ্লিকেটেড, তার ২০০২ সালের সফল একক গানের সম্মানে।'
+2025-11-25 20:03:23 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:03:25 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='एव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, जो उनके 2002 के सफल सिंगल के सम्मान में है।' retry='एव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, जो उनके 2002 के सफल सिंगल के सम्मान में है।'
+2025-11-25 20:03:26 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:03:28 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='एव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में' retry='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में'
+2025-11-25 20:22:40 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:22:41 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, अपने 2002 के सफल सिंगल के सम्मान में' retry='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, जो उनके 2002 के सफल सिंगल के सम्मान में है।'
+2025-11-25 20:22:45 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:22:46 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में' retry='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में'
+2025-11-25 20:23:49 warning: produced text appears not to be in th script. Retrying once.
+2025-11-25 20:27:52 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:27:53 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में' retry='अव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, जो उनके 2002 के सफल सिंगल के सम्मान में है।'
+2025-11-25 20:27:54 warning: produced text appears not to be in hi script. Retrying once.
+2025-11-25 20:27:56 error: retry also not in hi script. Marking INVALID_LANGUAGE. produced='एव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, 2002 के उनके सफल सिंगल के सम्मान में' retry='एव्रिल लवीन ने अपने पहले वाइन का नाम बंशी कॉम्प्लिकेटेड रखा, जो उनके 2002 के सफल सिंगल के सम्मान में है'
+2025-11-25 20:29:22 warning: produced text appears not to be in uk script. Retrying once.
+2025-11-25 20:29:32 warning: produced text appears not to be in uk script. Retrying once.
+2025-11-25 20:29:40 error: retry also not in uk script. Marking INVALID_LANGUAGE. produced='їїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїї' retry='їїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїїї'

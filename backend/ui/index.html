@@ -28,27 +28,18 @@
 
         <div id="areasContainer"></div>
 
+        <!-- Permanent Text Box Panel -->
+        <div class="panel" id="permanentTextboxPanel">
+        <label for="permanentTextbox" class="label">Descripción de Foto</label>
+        <textarea id="permanentTextbox" class="textarea" rows="11" placeholder="Escribe aquí la descripción/bajada de la foto."></textarea>
+        </div>
+
+
         <div class="panel panel-actions">
           <button id="renderBtn" class="btn btn-render">Preview</button>
           <button id="downloadBtn" class="btn btn-download">Descargar</button>
         </div>
 
-        <!-- Languages panel -->
-        <div class="panel panel-languages" id="languagesPanel" aria-label="Language selection">
-          <div class="label-row" style="margin-bottom:8px;">
-            <div class="label" style="font-weight:700;">Languages</div>
-            <div style="display:flex;gap:16px;align-items:center;">
-              <button id="selectAllLang" class="btn small">Seleccionar Todos</button>
-              <button id="clearAllLang" class="btn small">Eliminar Todos</button>
-            </div>
-          </div>
-
-          <div id="languagesGrid" class="languages-grid" role="group" aria-label="Available languages"></div>
-
-          <div id="selectedLangsSummary" class="langs-summary" aria-live="polite" style="margin-top:10px;"></div>
-
-          <div class="help" style="margin-top:10px;">Selecciona uno o más idiomas. Usa Seleccionar Todos / Eliminar Todos para tu conveniencia. Nota: El original en Español (es) será incluido siempre en el ZIP.</div>
-        </div>
 
         <div class="panel panel-diagnostics" id="diagnosticsPanel" hidden>
           <h3>Diagnostics</h3>
@@ -71,6 +62,27 @@
         </div>
       </section>
     </main>
+
+
+
+    <!-- Languages panel -->
+        <div class="panel panel-languages" id="languagesPanel" aria-label="Language selection">
+          <div class="label-row" style="margin-bottom:8px;">
+            <div class="label" style="font-weight:700;">Languages</div>
+            <div style="display:flex;gap:16px;align-items:center;">
+              <button id="selectAllLang" class="btn small">Seleccionar Todos</button>
+              <button id="clearAllLang" class="btn small">Eliminar Todos</button>
+            </div>
+          </div>
+
+          <div id="languagesGrid" class="languages-grid" role="group" aria-label="Available languages"></div>
+
+          <div id="selectedLangsSummary" class="langs-summary" aria-live="polite" style="margin-top:10px;"></div>
+
+          <div class="help" style="margin-top:10px;">Selecciona uno o más idiomas. Usa Seleccionar Todos / Eliminar Todos para tu conveniencia. Nota: El original en Español (es) será incluido siempre en el ZIP.</div>
+        </div>
+
+
 
     <footer class="app-footer">
       <small class="muted">Etox - Upsomedia</small>
@@ -518,6 +530,9 @@ async function callRender(payloadArray) {
   }
 
   const fd = new FormData();
+  // Add permanent note to the FormData
+  const permanentNote = document.getElementById('permanentTextbox')?.value || '';
+  fd.append('permanent_note', permanentNote);
   fd.append('template_id', templateSelect.value);
   fd.append('payload', JSON.stringify(payloadArray));
   fd.append('image', file);
@@ -610,7 +625,7 @@ function renderLanguagesGrid() {
 
   languagesGrid.innerHTML = '';
   languagesGrid.style.display = 'grid';
-  languagesGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+  languagesGrid.style.gridTemplateColumns = 'repeat(, minmax(0, 1fr))';
   languagesGrid.style.gap = '8px 12px';
   languagesGrid.style.alignItems = 'center';
   languagesGrid.style.padding = '6px 0';
@@ -761,6 +776,10 @@ filenameSaveBtn?.addEventListener('click', async (e) => {
 
   const payload = buildPayloadFromControls();
   const fd = new FormData();
+  // Add permanent note to the FormData
+  const permanentNote = document.getElementById('permanentTextbox')?.value || '';
+  console.log("permanentNote value about to send:", permanentNote);
+  fd.append('permanent_note', permanentNote);
   fd.append('template_id', templateSelect.value);
   fd.append('payload', JSON.stringify(payload));
   fd.append('languages', JSON.stringify(langs));

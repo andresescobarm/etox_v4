@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import csv
+from tradufotos import translate, translate_caption
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,32 @@ from typing import List, Tuple, Optional
 import re
 import zipfile
 import copy
+from difflib import SequenceMatcher
+import concurrent.futures
+import multiprocessing
+import time
+
+### FUZZY MACHINE
+
+
+def find_best_fuzzy_match(text, target_phrase, threshold=0.7):
+    """Return the most similar substring to target_phrase in text (if above threshold)."""
+    words = text.split()
+    target_n = max(1, len(target_phrase.split()))
+    best = None
+    best_score = 0
+    n = len(words)
+    for i in range(n):
+        for j in range(i+1, min(n+1, i+target_n+4)):  # Try chunks up to target length +3
+            chunk = ' '.join(words[i:j])
+            score = SequenceMatcher(None, chunk.lower(), target_phrase.lower()).ratio()
+            if score > best_score:
+                best_score = score
+                best = chunk
+    if best_score >= threshold:
+        return best
+    return None
+
 
 app = FastAPI(title="Etos Backend")
 
@@ -36,6 +64,48 @@ FONTS_DIR = Path("fonts")
 _punct_re = re.compile(r'^[^\w\s]+$', flags=re.UNICODE)
 def is_punctuation_token(s: str) -> bool:
     return bool(_punct_re.match(s))
+
+# Distinguish opening vs closing punctuation so spacing rules can be correct:
+OPENING_PUNCT = set(['"', '“', '«', '(', '[', '¿', '¡'])
+CLOSING_PUNCT = set([',', '.', ';', ':', '!', '?', '”', '»', ')', ']', '…', '—', '–', '-'])
+
+def contains_opening_punct(s: str) -> bool:
+    """Return True if token contains any opening punctuation character."""
+    return bool(s) and any(ch in OPENING_PUNCT for ch in s)
+
+def contains_closing_punct(s: str) -> bool:
+    """Return True if token contains any closing punctuation character."""
+    return bool(s) and any(ch in CLOSING_PUNCT for ch in s)
+
+
+def join_tokens_with_spacing(ln: List[Tuple[str, str]]) -> str:
+    """
+    Given a list of (token, color) pairs, join them into a string using the spacing rules:
+    - No space before any token that contains closing punctuation (e.g. '.', ',', '!' etc).
+    - No space after any token that contains opening punctuation (e.g. opening quote, bracket).
+    - Space after a punctuation token that is a closing punctuation when it is the current token (comma behavior).
+    - Otherwise, regular single space between words.
+    """
+    if not ln:
+        return ""
+    s = ""
+    for idx, (w, c) in enumerate(ln):
+        s += w
+        if idx < len(ln) - 1:
+            next_token = ln[idx + 1][0]
+            # Prefer rule: if next token contains any closing punctuation, don't add a space before it.
+            if contains_closing_punct(next_token):
+                sep = ""
+            # If current token contains opening punctuation, don't add a space after it.
+            elif contains_opening_punct(w):
+                sep = ""
+            # If current token is a closing punctuation token, keep a space after it (comma -> space).
+            elif contains_closing_punct(w):
+                sep = " "
+            else:
+                sep = " "
+            s += sep
+    return s
 
 
 def load_templates():
@@ -97,27 +167,51 @@ def wrap_text(draw: ImageDraw.Draw, text: str, font: ImageFont.FreeTypeFont, max
 
 def wrap_words_with_color(draw: ImageDraw.Draw, words_with_color: List[Tuple[str, str]],
                           font: ImageFont.FreeTypeFont, max_width: int):
+    """
+    Wrap a list of (token, color) pairs into lines, respecting punctuation spacing rules:
+    - Attach closing punctuation to previous token (no space before).
+    - Do not add a space after opening punctuation.
+    - Otherwise, use a single space between tokens.
+    """
     if not words_with_color:
         return [[]]
     lines = []
     cur_line = [words_with_color[0]]
     cur_text = words_with_color[0][0]
+    last_was_opening = contains_opening_punct(cur_text)
     for wcol in words_with_color[1:]:
         word = wcol[0]
-        if is_punctuation_token(word):
-            cand_text = cur_text + word
+        word_is_opening = contains_opening_punct(word)
+        word_is_closing = contains_closing_punct(word)
+
+        # Build candidate text respecting opening vs closing punctuation.
+        # If the next token contains any closing punctuation, attach it without a space before.
+        if word_is_closing:
+            cand_text = cur_text + word  # attach closing punctuation to previous token (no space before)
         else:
-            cand_text = cur_text + " " + word
+            # If the previous token was an opener, attach directly (no space after opener).
+            if last_was_opening:
+                cand_text = cur_text + word
+            else:
+                cand_text = cur_text + " " + word
+
         if draw.textlength(cand_text, font=font) <= max_width:
             cur_line.append(wcol)
-            if is_punctuation_token(word):
+            # Update cur_text and last_was_opening for next iteration
+            if word_is_closing:
                 cur_text = cur_text + word
+                last_was_opening = False
             else:
-                cur_text = cur_text + " " + word
+                if last_was_opening:
+                    cur_text = cur_text + word
+                else:
+                    cur_text = cur_text + " " + word
+                last_was_opening = word_is_opening
         else:
             lines.append(cur_line)
             cur_line = [wcol]
             cur_text = word
+            last_was_opening = word_is_opening
     lines.append(cur_line)
     return lines
 
@@ -135,29 +229,72 @@ def split_spans_to_words(spans: List[dict], default_color: str):
 
 
 def build_spans_from_highlight_phrase(text: str, base_color: str, highlight_color: str, phrase: str):
+    """
+    Build spans from one or multiple highlight phrases.
+
+    Supported input for `phrase`:
+      - Single phrase (exact substring): "primer vino"
+      - Multiple phrases separated by '/' (user-proposed delimiter): "llamado/honor" or "llamado / honor"
+        The delimiter '/' was chosen because it's uncommon in normal copy; phrases are stripped
+        and matched case-insensitively.
+
+    Matching rules:
+      - Find all non-overlapping matches for the requested phrases.
+      - When matches overlap, prefer the match that starts earlier; for the same start prefer the longer match.
+      - Reconstruct a sequence of spans covering the whole text in order, using highlight_color for matched
+        segments and base_color for everything else.
+
+    Returns a list of {"text": ..., "color": ...} or None if phrase is falsy.
+    """
     if not phrase:
         return None
 
+    # Split by '/' delimiter and keep non-empty phrases (strip whitespace)
+    raw_phrases = [p.strip() for p in phrase.split('/') if p.strip()]
+    if not raw_phrases:
+        return None
+
     flags = re.IGNORECASE | re.UNICODE
-    pattern = re.compile(re.escape(phrase), flags=flags)
+
+    # Collect all matches for every phrase
+    matches = []
+    for p in raw_phrases:
+        try:
+            pattern = re.compile(re.escape(p), flags=flags)
+        except Exception:
+            pattern = re.compile(re.escape(p), flags=flags)
+        for m in pattern.finditer(text):
+            matches.append((m.start(), m.end(), m.group(0)))
+
+    if not matches:
+        return [{"text": text, "color": base_color}]
+
+    # Sort by start asc, length desc (so longer matches at same start win)
+    matches.sort(key=lambda x: (x[0], -(x[1] - x[0])))
+
+    # Build non-overlapping sequence of intervals covering matched parts only,
+    # skipping matches that are fully consumed by previous selections.
+    merged = []
+    cur_idx = 0
+    for start, end, mtext in matches:
+        if end <= cur_idx:
+            continue
+        if start < cur_idx:
+            start = cur_idx
+        if start > cur_idx:
+            merged.append((cur_idx, start, False))
+        merged.append((start, end, True))
+        cur_idx = end
+
+    if cur_idx < len(text):
+        merged.append((cur_idx, len(text), False))
 
     spans: List[dict] = []
-    last_idx = 0
-    for m in pattern.finditer(text):
-        start, end = m.start(), m.end()
-        if start > last_idx:
-            prefix = text[last_idx:start]
-            if prefix:
-                spans.append({"text": prefix, "color": base_color})
-        match_text = text[start:end]
-        if match_text:
-            spans.append({"text": match_text, "color": highlight_color})
-        last_idx = end
-
-    if last_idx < len(text):
-        suffix = text[last_idx:]
-        if suffix:
-            spans.append({"text": suffix, "color": base_color})
+    for s, e, is_high in merged:
+        seg = text[s:e]
+        if not seg:
+            continue
+        spans.append({"text": seg, "color": highlight_color if is_high else base_color})
 
     if not spans:
         return [{"text": text, "color": base_color}]
@@ -206,8 +343,15 @@ def ellipsize_spans_last_line(draw: ImageDraw.Draw, font: ImageFont.FreeTypeFont
         for idx, (wrd, col) in enumerate(words_list):
             if idx < len(words_list) - 1:
                 next_token = words_list[idx + 1][0]
-                if is_punctuation_token(next_token):
+                # If the next token contains any closing punctuation, don't add space before it.
+                if contains_closing_punct(next_token):
                     part = wrd
+                # If current token contains opening punctuation, don't add space after it.
+                elif contains_opening_punct(wrd):
+                    part = wrd
+                # If current token contains closing punctuation, include a space after it (comma).
+                elif contains_closing_punct(wrd):
+                    part = wrd + " "
                 else:
                     part = wrd + " "
             else:
@@ -225,8 +369,12 @@ def ellipsize_spans_last_line(draw: ImageDraw.Draw, font: ImageFont.FreeTypeFont
         for idx, (wrd, col) in enumerate(words):
             if idx < len(words) - 1:
                 next_token = words[idx + 1][0]
-                if is_punctuation_token(next_token):
+                if contains_closing_punct(next_token):
                     part = wrd
+                elif contains_opening_punct(wrd):
+                    part = wrd
+                elif contains_closing_punct(wrd):
+                    part = wrd + " "
                 else:
                     part = wrd + " "
             else:
@@ -311,7 +459,7 @@ def fit_text_in_box(draw, text: str, font_path: Path, max_font_size: int, min_fo
         return lines[:max_lines], font, line_h, total_h
 
 
-# Full render_canvas (unchanged from prior working implementation)
+# Full render_canvas (unchanged from prior working implementation except punctuation spacing fixes)
 def render_canvas(template, payload_data, file_bytes):
     try:
         user_img = Image.open(io.BytesIO(file_bytes)).convert("RGBA")
@@ -385,12 +533,8 @@ def render_canvas(template, payload_data, file_bytes):
                 measured_lines_text = []
                 if used_spans:
                     for ln in lines:
-                        s = ""
-                        for idx2, (w, c) in enumerate(ln):
-                            if idx2 > 0 and not is_punctuation_token(w):
-                                s += " "
-                            s += w
-                        measured_lines_text.append(s)
+                        # Use join_tokens_with_spacing to build the visible string
+                        measured_lines_text.append(join_tokens_with_spacing(ln))
                 else:
                     measured_lines_text = list(lines)
                 measured_max_w = 0
@@ -535,12 +679,7 @@ def render_canvas(template, payload_data, file_bytes):
         measured_lines_text = []
         if used_spans:
             for ln in lines:
-                s = ""
-                for idx2, (w, c) in enumerate(ln):
-                    if idx2 > 0 and not is_punctuation_token(w):
-                        s += " "
-                    s += w
-                measured_lines_text.append(s)
+                measured_lines_text.append(join_tokens_with_spacing(ln))
         else:
             measured_lines_text = list(lines)
 
@@ -593,7 +732,11 @@ def render_canvas(template, payload_data, file_bytes):
                         break
                     test_heights = []
                     test_max_w = 0
-                    for ltxt in ([" ".join([w for (w, c) in ln]) for ln in test_lines] if used_spans else test_lines):
+                    if used_spans:
+                        test_line_texts = [join_tokens_with_spacing(ln) for ln in test_lines]
+                    else:
+                        test_line_texts = test_lines
+                    for ltxt in (test_line_texts):
                         bbox = draw.textbbox((0, 0), ltxt if ltxt != "" else " ", font=test_font)
                         test_heights.append(int(bbox[3] - bbox[1]))
                         test_w = int(bbox[2] - bbox[0])
@@ -674,7 +817,21 @@ def render_canvas(template, payload_data, file_bytes):
             if used_spans:
                 line_w = 0.0
                 for idx, (w, col) in enumerate(ln):
-                    part = w + (" " if (idx < len(ln) - 1 and not is_punctuation_token(ln[idx + 1][0])) else "")
+                    # Compute separator after current token
+                    if idx < len(ln) - 1:
+                        next_token = ln[idx + 1][0]
+                        # If the next token contains any closing punctuation, don't add space before it.
+                        if contains_closing_punct(next_token):
+                            sep = ""
+                        elif contains_opening_punct(w):
+                            sep = ""
+                        elif contains_closing_punct(w):
+                            sep = " "
+                        else:
+                            sep = " "
+                    else:
+                        sep = ""
+                    part = w + sep
                     line_w += bd.textlength(part, font=font)
                 if area.get("align", "center") == "center":
                     x = (block_w - line_w) // 2
@@ -682,12 +839,24 @@ def render_canvas(template, payload_data, file_bytes):
                     x = 0
                 else:
                     x = block_w - line_w
-                line_text = " ".join([w for (w, c) in ln]) if ln else " "
+                line_text = join_tokens_with_spacing(ln) if ln else " "
                 bbox = bd.textbbox((0, 0), line_text if line_text != "" else " ", font=font)
                 y_top = int(i * effective_gap - bbox[1])
                 cur_x = x
                 for idx, (w, col) in enumerate(ln):
-                    draw_text = w + (" " if (idx < len(ln) - 1 and not is_punctuation_token(ln[idx + 1][0])) else "")
+                    if idx < len(ln) - 1:
+                        next_token = ln[idx + 1][0]
+                        if contains_closing_punct(next_token):
+                            sep = ""
+                        elif contains_opening_punct(w):
+                            sep = ""
+                        elif contains_closing_punct(w):
+                            sep = " "
+                        else:
+                            sep = " "
+                    else:
+                        sep = ""
+                    draw_text = w + sep
                     bd.text((cur_x, y_top), draw_text, font=font, fill=col)
                     cur_x += bd.textlength(draw_text, font=font)
                 if i == len(lines) - 1 and ellipsis_info.get("append", False):
@@ -877,6 +1046,66 @@ async def render_preview(template_id: str = Form(...), payload: str = Form(...),
     return StreamingResponse(out, media_type="image/png")
 
 
+# Concurrency-enabled render_download replacement
+
+# Tunables: adjust for your environment
+MAX_TRANSLATION_WORKERS = 8        # thread workers for translate() calls
+MAX_RENDER_WORKERS = max(1, multiprocessing.cpu_count() - 1)  # process workers for rendering
+ZIP_COMPRESS = zipfile.ZIP_STORED  # ZIP_STORED = faster, bigger; ZIP_DEFLATED = slower, smaller
+
+def _translate_safe(text: str, lang: str):
+    """Call translate() safely and return the human result or original on failure."""
+    try:
+        res = translate(text, lang)
+        if isinstance(res, dict) and res.get("human"):
+            return res["human"]
+        if isinstance(res, str):
+            return res
+        return text
+    except Exception:
+        return text
+
+def render_for_language_worker(args):
+    """
+    Worker executed in a separate process.
+    args: (template, per_payload, file_bytes, lang_abbr, base_name, permanent_note)
+    Returns: dict with keys: lang, png_bytes (or None on error), csv_map (dict fname->bytes), error (optional)
+    """
+    template, per_payload, file_bytes, lang_abbr, base_name, permanent_note = args
+    result = {"lang": lang_abbr, "png_bytes": None, "csv_map": {}, "error": None}
+    try:
+        canvas, diagnostics, any_debug = render_canvas(template, per_payload, file_bytes)
+        img_buf = io.BytesIO()
+        canvas.convert("RGB").save(img_buf, format="PNG", quality=90)
+        img_buf.seek(0)
+        result["png_bytes"] = img_buf.read()
+    except Exception as e:
+        result["error"] = f"render error: {repr(e)}"
+        return result
+
+    # CSV for non-es and when permanent_note provided
+    if lang_abbr != "es" and permanent_note and permanent_note.strip():
+        try:
+            tresult = translate_caption(permanent_note, lang_abbr)
+            if isinstance(tresult, dict) and tresult.get("human"):
+                translated_note = tresult["human"]
+            elif isinstance(tresult, str):
+                translated_note = tresult
+            else:
+                translated_note = permanent_note
+        except Exception:
+            translated_note = permanent_note
+
+        out = io.StringIO()
+        writer = csv.writer(out, lineterminator="\n")
+        writer.writerow(["es", lang_abbr])
+        writer.writerow([permanent_note, translated_note])
+        csv_bytes = out.getvalue().encode("utf-8")
+        out.close()
+        result["csv_map"][f"{base_name}_{lang_abbr}.csv"] = csv_bytes
+
+    return result
+
 @app.post("/render-download")
 async def render_download(
     template_id: str = Form(...),
@@ -884,7 +1113,9 @@ async def render_download(
     languages: str = Form(...),
     base_name: str = Form(...),
     image: UploadFile = File(...),
+    permanent_note: str = Form(""),
 ):
+    # Basic validation (same as original)
     try:
         payload_data = json.loads(payload)
     except Exception:
@@ -896,7 +1127,6 @@ async def render_download(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid languages JSON array")
 
-    # Read and validate uploaded file bytes
     file_bytes = await image.read()
     if not file_bytes or len(file_bytes) == 0:
         return JSONResponse(status_code=400, content={"error": "Image upload is required. Please upload an image before downloading."})
@@ -916,7 +1146,7 @@ async def render_download(
             "available_template_ids": available
         })
 
-    # Ensure Spanish 'es' original is always included
+    # ensure 'es' first and unique languages preserved
     langs_final = []
     if 'es' not in requested_langs:
         langs_final.append('es')
@@ -928,36 +1158,94 @@ async def render_download(
         if l not in langs_final:
             langs_final.append(l)
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for lang_abbr in langs_final:
-            per_payload = []
-            for entry in payload_data:
-                ecopy = copy.deepcopy(entry)
-                ecopy['lang'] = lang_abbr
-                per_payload.append(ecopy)
+    # 1) Collect unique source texts to translate
+    texts_to_translate = set()
+    for entry in payload_data:
+        txt = entry.get("text", "")
+        if txt and txt.strip():
+            texts_to_translate.add(txt)
+        hp = entry.get("highlight_phrase")
+        if hp and hp.strip():
+            texts_to_translate.add(hp)
+    if permanent_note and permanent_note.strip():
+        texts_to_translate.add(permanent_note)
 
+    # 2) Build translation cache for all non-es langs (use threads for network-bound translate)
+    translation_cache = {}
+    for lang_abbr in langs_final:
+        if lang_abbr == "es":
+            for t in texts_to_translate:
+                translation_cache[(t, "es")] = t
+            continue
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_TRANSLATION_WORKERS) as tex:
+            futures = {tex.submit(_translate_safe, t, lang_abbr): t for t in texts_to_translate}
+            for fut in concurrent.futures.as_completed(futures):
+                src = futures[fut]
+                try:
+                    tr = fut.result()
+                except Exception:
+                    tr = src
+                translation_cache[(src, lang_abbr)] = tr
+
+    # 3) Build per-language payloads using cached translations and fuzzy matching for highlight_phrase
+    per_language_payloads = {}
+    for lang_abbr in langs_final:
+        per_payload = []
+        for entry in payload_data:
+            ecopy = copy.deepcopy(entry)
+            ecopy['lang'] = lang_abbr
+
+            if lang_abbr != "es":
+                txt = ecopy.get("text", "")
+                if txt and txt.strip():
+                    ecopy["text"] = translation_cache.get((txt, lang_abbr), txt)
+
+            if lang_abbr != "es" and "highlight_phrase" in ecopy and ecopy["highlight_phrase"]:
+                hp = ecopy["highlight_phrase"]
+                t_phrase = translation_cache.get((hp, lang_abbr), hp)
+                if ecopy.get("text"):
+                    match = find_best_fuzzy_match(ecopy["text"], t_phrase, threshold=0.7)
+                    if match:
+                        ecopy["highlight_phrase"] = match
+                    else:
+                        ecopy["highlight_phrase"] = ""
+                else:
+                    ecopy["highlight_phrase"] = ""
+            per_payload.append(ecopy)
+        per_language_payloads[lang_abbr] = per_payload
+
+    # 4) Prepare worker args and render in parallel (ProcessPoolExecutor)
+    worker_args = []
+    for lang_abbr in langs_final:
+        worker_args.append((template, per_language_payloads[lang_abbr], file_bytes, lang_abbr, base_name, permanent_note))
+
+    results = []
+    # Use processes for CPU-bound rendering
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_RENDER_WORKERS) as pe:
+        futures = {pe.submit(render_for_language_worker, arg): arg[3] for arg in worker_args}
+        for fut in concurrent.futures.as_completed(futures):
+            lang = futures[fut]
             try:
-                canvas, diagnostics, any_debug = render_canvas(template, per_payload, file_bytes)
-            except HTTPException as he:
-                msg = f"Failed to render for language {lang_abbr}: {he.detail}"
-                zf.writestr(f"{base_name}_{lang_abbr}_ERROR.txt", msg)
-                continue
+                res = fut.result()
+                results.append(res)
             except Exception as e:
-                msg = f"Unexpected error rendering language {lang_abbr}: {str(e)}"
-                zf.writestr(f"{base_name}_{lang_abbr}_ERROR.txt", msg)
-                continue
+                results.append({"lang": lang, "png_bytes": None, "csv_map": {}, "error": repr(e)})
 
-            img_bytes = io.BytesIO()
-            canvas.convert("RGB").save(img_bytes, format="PNG", quality=90)
-            img_bytes.seek(0)
-            filename = f"{base_name}_{lang_abbr}.png"
-            zf.writestr(filename, img_bytes.read())
+    # 5) Build zip in main process
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=ZIP_COMPRESS) as zf:
+        for r in results:
+            lang = r.get("lang")
+            if r.get("png_bytes"):
+                zf.writestr(f"{base_name}_{lang}.png", r["png_bytes"])
+            else:
+                zf.writestr(f"{base_name}_{lang}_ERROR.txt", f"Failed to render {lang}: {r.get('error','unknown')}".encode("utf-8"))
+            for fname, content in r.get("csv_map", {}).items():
+                zf.writestr(fname, content)
 
     zip_buffer.seek(0)
-    headers = {
-        "Content-Disposition": f'attachment; filename="{base_name}.zip"'
-    }
+    headers = {"Content-Disposition": f'attachment; filename=\"{base_name}.zip\"'}
     return StreamingResponse(zip_buffer, media_type="application/zip", headers=headers)
 
 

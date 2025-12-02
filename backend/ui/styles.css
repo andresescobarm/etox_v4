@@ -28,10 +28,10 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 .columns{
   display:flex;
   gap:var(--gap);
-  padding:26px;
+  padding:0 26px;    /* left/right only, no top/bottom */
   flex:1;
-  align-items:stretch;               /* ensure both columns same height */
-  justify-content:center;           /* center the two-column block */
+  align-items:stretch;
+  justify-content:center;
   max-width:1200px;
   margin:0 auto;
 }
@@ -146,11 +146,44 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 .area-panel .row > .input { flex:1; }
 .area-panel .label-row .color-attach { margin-left:12px; display:flex; gap:8px; align-items:center; }
 
-/* Languages panel specific styles */
+/* ======= LANGUAGES PANEL ALIGN FIX ======= */
 .panel-languages .label { margin-bottom: 0; }
+.panel-languages {
+  max-width: 1200px;
+  width: 100%;
+  margin: 8px auto 16px auto;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, var(--panel-strong), var(--panel-bg));
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+  padding: 14px 0; /* <-- no side padding here */
+}
+.panel-languages-inner-row {
+  display: flex;
+  flex-direction: row;
+}
+
+/* fixed spacer matches col-left width */
+.panel-languages-spacer {
+  flex: 0 0 var(--left-width);
+  max-width: var(--left-width);
+  min-width: 260px;
+  margin-right: var(--gap);
+  /* invisible; occupies the "column" left of the real grid */
+}
+
+/* contents for alignment with col-right */
+.panel-languages-main {
+  flex: 1 1 0%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .languages-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(11, 1fr);
   gap: 8px 12px;
   margin-top: 10px;
   max-height: 240px;
@@ -161,7 +194,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 .lang-item input[type="checkbox"] { width:18px; height:18px; margin:0; accent-color:var(--accent); }
 .lang-item label { cursor:pointer; user-select:none; color:var(--text); font-size:14px; }
 
-/* Selected languages summary */
 .langs-summary { margin-top: 10px; display:flex; flex-direction:column; gap:8px; }
 .lang-chips { display:flex; flex-wrap:wrap; gap:8px; }
 .lang-chip { display:inline-block; background: rgba(255,255,255,0.04); color:var(--text); padding:6px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.06); font-size:13px; }
@@ -170,7 +202,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 .modal { display:none; position:fixed; inset:0; z-index:1200; }
 .modal-backdrop { position:absolute; inset:0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); }
 
-/* naming modal */
 .modal-dialog {
   position:relative;
   max-width:520px;
@@ -182,16 +213,10 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 }
 .modal-naming { background: linear-gradient(180deg, rgba(255,0,255,0.22), rgba(255,0,255,0.18)); color: var(--text); }
 
-/* title -> paragraph gap */
 .modal-naming p { margin-bottom: var(--modal-gap); }
-
-/* label uses separate variable so only this gap changes */
 .modal-dialog.modal-naming label.label { margin-top: 0; margin-bottom: var(--modal-gap-label); }
-
-/* fallback: also add top margin on the input to ensure visible spacing */
 .modal-dialog.modal-naming .modal-filename-input { margin-top: calc(var(--modal-gap-label)); }
 
-/* filename input frame */
 .modal-naming .modal-filename-input {
   padding: 12px 14px;
   border-radius: 10px;
@@ -199,7 +224,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
   background: rgba(0,0,0,0.14);
   color: var(--text);
   outline: none;
-  width: 100%;
+  width: 100%;  
   box-sizing: border-box;
   transition: box-shadow 120ms ease, border-color 120ms ease;
 }
@@ -209,11 +234,12 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 .modal-progress { background: linear-gradient(180deg, rgba(255,0,255,0.14), rgba(255,0,255,0.10)); color: var(--text); }
 .modal-dialog h3 { margin:0 0 8px 0; font-size:16px; }
 
-/* progress bar */
 .progress-bar-outer { width:100%; height:14px; border-radius:10px; background: rgba(255,255,255,0.06); overflow:hidden; border:1px solid rgba(255,255,255,0.04); }
 .progress-bar-inner { height:100%; width:0%; background: linear-gradient(90deg, rgba(255,0,255,0.95), rgba(255,120,255,0.9)); transition: width 240ms linear; }
 .progress-bar-inner.indeterminate { position:relative; width:100%; background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,0,255,0.95), rgba(255,255,255,0.06)); animation: prog-indeterminate 1.2s linear infinite; background-size: 200% 100%; }
-@keyframes prog-indeterminate { 0% { background-position: -40% 0%; } 100% { background-position: 140% 0%; } }
+@keyframes prog-indeterminate { 0% { background-position: -40% 0%; } 100% { background-position: 140% 0%; }
+
+}
 
 /* Make Template C main textareas compact (matching font-size input frame) */
 .compact-textarea {
@@ -225,7 +251,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
   font-family: inherit;
 }
 
-/* responsive */
 @media (max-width:900px){
   .languages-grid { grid-template-columns: repeat(2, 1fr); }
   .columns{flex-direction:column;padding:12px}
@@ -233,4 +258,6 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
   .col-right{order:2}
   .divider{display:none}
   .preview-frame{max-width:100%}
+  .panel-languages-inner-row { flex-direction:column; }
+  .panel-languages-spacer { display: none !important;}
 }

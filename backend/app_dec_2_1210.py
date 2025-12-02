@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import csv
+from tradufotos import translate, translate_caption
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,33 @@ from typing import List, Tuple, Optional
 import re
 import zipfile
 import copy
+from difflib import SequenceMatcher
+
+
+
+
+### FUZZY MACHINE
+
+
+def find_best_fuzzy_match(text, target_phrase, threshold=0.7):
+    """Return the most similar substring to target_phrase in text (if above threshold)."""
+    words = text.split()
+    target_n = max(1, len(target_phrase.split()))
+    best = None
+    best_score = 0
+    n = len(words)
+    for i in range(n):
+        for j in range(i+1, min(n+1, i+target_n+4)):  # Try chunks up to target length +3
+            chunk = ' '.join(words[i:j])
+            score = SequenceMatcher(None, chunk.lower(), target_phrase.lower()).ratio()
+            if score > best_score:
+                best_score = score
+                best = chunk
+    if best_score >= threshold:
+        return best
+    return None
+
+
 
 app = FastAPI(title="Etos Backend")
 
@@ -884,7 +913,11 @@ async def render_download(
     languages: str = Form(...),
     base_name: str = Form(...),
     image: UploadFile = File(...),
+    permanent_note: str = Form(""),
 ):
+
+    print("permanent_note received:", repr(permanent_note))
+
     try:
         payload_data = json.loads(payload)
     except Exception:
@@ -935,6 +968,39 @@ async def render_download(
             for entry in payload_data:
                 ecopy = copy.deepcopy(entry)
                 ecopy['lang'] = lang_abbr
+
+                # Translate and fuzzy-match highlight_phrase for non-Spanish
+                if lang_abbr != "es" and "highlight_phrase" in ecopy and ecopy["highlight_phrase"]:
+                    try:
+                        hp = ecopy["highlight_phrase"]
+                        hp_result = translate(hp, lang_abbr)
+                        if isinstance(hp_result, dict) and "human" in hp_result and hp_result["human"]:
+                            t_phrase = hp_result["human"]
+                        else:
+                            t_phrase = hp
+                    except Exception:
+                        t_phrase = hp
+                else:
+                    t_phrase = None
+
+                # Translate the main text for non-Spanish
+                if lang_abbr != "es":
+                    try:
+                        txt = ecopy.get("text", "")
+                        if txt.strip():
+                            tresult = translate(txt, lang_abbr)
+                            if isinstance(tresult, dict) and "human" in tresult and tresult["human"]:
+                                ecopy["text"] = tresult["human"]
+                    except Exception:
+                        pass
+
+                # Fuzzy-match the translated highlight into the translated text (if needed)
+                if lang_abbr != "es" and t_phrase and ecopy.get("text"):
+                    match = find_best_fuzzy_match(ecopy["text"], t_phrase, threshold=0.7)
+                    if match:
+                        ecopy["highlight_phrase"] = match
+                    else:
+                        ecopy["highlight_phrase"] = ""  # Or None
                 per_payload.append(ecopy)
 
             try:
@@ -954,6 +1020,26 @@ async def render_download(
             filename = f"{base_name}_{lang_abbr}.png"
             zf.writestr(filename, img_bytes.read())
 
+            # ---- Write CSV for non-Spanish ----
+            if lang_abbr != "es" and permanent_note.strip():
+                try:
+                    tresult = translate_caption(permanent_note, lang_abbr)
+                    if isinstance(tresult, dict) and "human" in tresult and tresult["human"]:
+                        translated_note = tresult["human"]
+                    else:
+                        translated_note = permanent_note
+                except Exception:
+                    translated_note = permanent_note
+
+                output = io.StringIO()
+                csv_writer = csv.writer(output, lineterminator="\n")
+                csv_writer.writerow(["es", lang_abbr])
+                csv_writer.writerow([permanent_note, translated_note])
+                csvdata = output.getvalue()
+                csv_filename = f"{base_name}_{lang_abbr}.csv"
+                zf.writestr(csv_filename, csvdata)
+                output.close()
+
     zip_buffer.seek(0)
     headers = {
         "Content-Disposition": f'attachment; filename="{base_name}.zip"'
@@ -964,3 +1050,11 @@ async def render_download(
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.app:app", host="0.0.0.0", port=port)
