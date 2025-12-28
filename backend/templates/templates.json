@@ -12,7 +12,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-Black.ttf"
       },
       "watermark": null,
@@ -50,7 +52,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-ExtraBold.ttf"
       },
       "watermark": null,
@@ -88,7 +92,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-Black.ttf"
       },
       "watermark": null,
@@ -219,7 +225,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Lato-Regular.ttf"
       },
       "watermark": null,
@@ -241,7 +249,6 @@
         }
       ]
     },
-
     {
       "id": "template_E_portrait_1080x1350",
       "name": "Template E — portrait 1080x1350 (2 boxes, left/right — bottom bars)",
@@ -254,7 +261,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-Black.ttf"
       },
       "watermark": null,
@@ -299,7 +308,6 @@
         }
       ]
     },
-
     {
       "id": "template_A1_portrait_1080x1350",
       "name": "Template A.1 — A variant top text (1080x1350)",
@@ -312,7 +320,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-Black.ttf"
       },
       "watermark": null,
@@ -338,7 +348,6 @@
         }
       ]
     },
-
     {
       "id": "template_B1_portrait_1080x1350",
       "name": "Template B.1 — B variant bottom text (1080x1350)",
@@ -351,7 +360,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-ExtraBold.ttf"
       },
       "watermark": null,
@@ -377,7 +388,6 @@
         }
       ]
     },
-
     {
       "id": "template_D1_portrait_1080x1350",
       "name": "Template D.1 — D variant bottom text (1080x1350)",
@@ -390,7 +400,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Lato-Regular.ttf"
       },
       "watermark": null,
@@ -413,7 +425,6 @@
         }
       ]
     },
-
     {
       "id": "template_F_portrait_1080x1350",
       "name": "Template F — portrait 1080x1350 (2 bottom boxes)",
@@ -426,7 +437,9 @@
         "hi": "NotoSansDevanagari-Bold.ttf",
         "th": "NotoSansThai-Bold.ttf",
         "ja": "NotoSansJP-Black.ttf",
-        "zh-Hant": "Noto Sans CJK Regular.otf",
+        "zh-TW": "NotoSansTC-Black.ttf",
+        "zh-Hant": "NotoSansTC-Black.ttf",
+        "zh": "NotoSansTC-Black.ttf",
         "default": "Montserrat-ExtraBold.ttf"
       },
       "watermark": null,
