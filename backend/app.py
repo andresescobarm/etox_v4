@@ -1667,7 +1667,11 @@ async def test_celery(request:  Request):
 
 
 # Mount static files LAST (after all API routes)
-app.mount("/ui", StaticFiles(directory="ui", html=True), name="ui")
+UI_DIR = BASE_DIR / "ui"
+if UI_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+else:
+    print(f"⚠️  UI directory not found: {UI_DIR}")
 
 
 
