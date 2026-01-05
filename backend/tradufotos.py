@@ -29,7 +29,7 @@ from openai import OpenAI, AsyncOpenAI
 from rate_limiter import RateLimiter, RetryHandler
 from error_logger import ErrorLogger
 
-from cache_manager import get_cache_manager
+from .cache_manager import get_cache_manager
 
 # Initialize cache on module load
 _ = get_cache_manager()
@@ -864,7 +864,7 @@ def translate(text: str, lang: str, user_id: Optional[str] = None) -> dict:
     
     # ✅ CHECK CACHE FIRST
     try:
-        from cache_manager import get_cache_manager
+        from .cache_manager import get_cache_manager
         cache = get_cache_manager()
         cached = cache.get_translation(text, lang, "headline")
         if cached:
@@ -891,7 +891,7 @@ def translate(text: str, lang: str, user_id: Optional[str] = None) -> dict:
         
         # ✅ CACHE THE RESULT
         try:
-            from cache_manager import get_cache_manager
+            from .cache_manager import get_cache_manager
             cache = get_cache_manager()
             cache.set_translation(text, lang, translation_result, "headline")
         except Exception as e:
@@ -915,7 +915,7 @@ def translate_caption(text: str, lang: str, user_id: Optional[str] = None) -> di
     
     # ✅ CHECK CACHE FIRST
     try:
-        from cache_manager import get_cache_manager
+        from .cache_manager import get_cache_manager
         cache = get_cache_manager()
         cached = cache. get_translation(text, lang, "description")
         if cached:
@@ -937,7 +937,7 @@ def translate_caption(text: str, lang: str, user_id: Optional[str] = None) -> di
         
         # ✅ CACHE THE RESULT
         try: 
-            from cache_manager import get_cache_manager
+            from .cache_manager import get_cache_manager
             cache = get_cache_manager()
             cache.set_translation(text, lang, translation_result, "description")
         except Exception as e: 

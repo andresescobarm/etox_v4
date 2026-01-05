@@ -21,13 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageDraw, ImageFont, features, UnidentifiedImageError
 
-from tradufotos import translate, translate_caption, translate_with_highlight
-from user_queue import get_user_queue
-from cache_manager import get_cache_manager
+from .tradufotos import translate, translate_caption, translate_with_highlight
+from .user_queue import get_user_queue
+from .cache_manager import get_cache_manager
 
 import base64
 from celery. result import AsyncResult
-from celery_tasks import render_download_job
+from .celery_tasks import render_download_job
 
 
 # ============================================================
@@ -133,7 +133,7 @@ app.add_middleware(
 # Background health check task
 async def periodic_health_check():
     """Run health check every 10 minutes in background."""
-    from tradufotos import check_openai_health
+    from .tradufotos import check_openai_health
     
     while True: 
         try:
@@ -163,7 +163,7 @@ async def periodic_health_check():
 @app.on_event("startup")
 async def startup_event():
     """Run health check on startup and start background task."""
-    from tradufotos import check_openai_health
+    from .tradufotos import check_openai_health
     
     print("🔍 Running initial health check...")
     result = check_openai_health(max_retries=3)
@@ -329,7 +329,7 @@ def health_check():
     Health check endpoint. 
     Returns system status including OpenAI API health and queue status. 
     """
-    from user_queue import get_user_queue
+    from .user_queue import get_user_queue
     
     queue = get_user_queue(max_concurrent=10)
     
@@ -392,7 +392,7 @@ async def translate_concurrent_endpoint(request: Request):
             )
         
         # Import the concurrent function
-        from tradufotos import translate_all_concurrent
+        from .tradufotos import translate_all_concurrent
         
         # Run the concurrent translation
         results = await translate_all_concurrent(text, user_id)
@@ -1168,7 +1168,7 @@ def get_cache_stats():
     Useful for monitoring cache hit rate.
     """
     try:
-        from cache_manager import get_cache_manager
+        from .cache_manager import get_cache_manager
         cache = get_cache_manager()
         stats = cache.get_stats()
         
@@ -1622,7 +1622,7 @@ async def download_result(job_id: str):
 @app.post("/test-celery")
 async def test_celery(request:  Request):
     """Test Celery"""
-    from celery_tasks import render_download_job
+    from .celery_tasks import render_download_job
     import base64
     import io
     from PIL import Image
@@ -1674,4 +1674,3 @@ app.mount("/ui", StaticFiles(directory="ui", html=True), name="ui")
 if __name__ == "__main__": 
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

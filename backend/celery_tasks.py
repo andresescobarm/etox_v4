@@ -9,8 +9,8 @@ import json
 import copy
 import zipfile
 from typing import List, Dict, Any
-from celery_app import celery_app
-from cache_manager import get_cache_manager
+from .celery_app import celery_app
+from .cache_manager import get_cache_manager
 
 
 @celery_app.task(bind=True, name="tasks.render_download_job")
@@ -34,8 +34,8 @@ def render_download_job(
             - error: str (if failed)
     """
     import base64
-    from tradufotos import translate, translate_caption
-    from app import render_canvas, get_template_by_id, find_best_fuzzy_match
+    from .tradufotos import translate, translate_caption
+    from .app import render_canvas, get_template_by_id, find_best_fuzzy_match
     
     cache = get_cache_manager()
     
@@ -56,7 +56,7 @@ def render_download_job(
         self.update_state(state="PROCESSING", meta={"progress": 10, "status": "Extracting important words..."})
         
         # Extract important words (same as before)
-        from app import extract_important_words_from_original, find_important_words_in_translation
+        from .app import extract_important_words_from_original, find_important_words_in_translation
         original_important_words = {}
         for idx, entry in enumerate(payload_data):
             original_text = entry. get("text", "")
