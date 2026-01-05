@@ -4,3 +4,6 @@ pillow
 python-multipart
 openai
 python-dotenv
+python-bidi
+celery
+redis
