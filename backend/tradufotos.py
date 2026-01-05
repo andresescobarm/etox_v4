@@ -26,8 +26,8 @@ from time import time
 
 from openai import OpenAI, AsyncOpenAI
 
-from rate_limiter import RateLimiter, RetryHandler
-from error_logger import ErrorLogger
+from .rate_limiter import RateLimiter, RetryHandler
+from .error_logger import ErrorLogger
 
 from .cache_manager import get_cache_manager
 
