@@ -29,7 +29,7 @@ celery_app.conf. update(
     worker_max_tasks_per_child=50,
 )
 
-# Auto-discover tasks from celery_tasks module
-celery_app.autodiscover_tasks(['celery_tasks'], force=True)
+# Auto-discover tasks from the backend package
+celery_app.autodiscover_tasks(['backend.celery_tasks'], force=True)
 
 print("✅ Celery app configured")
