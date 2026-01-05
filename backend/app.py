@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 import asyncio
 from datetime import datetime
+import os
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi. responses import StreamingResponse, JSONResponse, RedirectResponse
@@ -43,9 +44,10 @@ FONTS_DIR = BASE_DIR / "fonts"
 # ============================================================
 
 RAQM_AVAILABLE = features.check("raqm")
-if not RAQM_AVAILABLE:  
+if not RAQM_AVAILABLE and os.getenv("SUPPRESS_LIBRAQM_WARNING") != "1":
     print("⚠️  WARNING: libraqm not available.    Complex scripts may not render correctly.")
     print("   Install:    brew install libraqm fribidi harfbuzz && pip install --upgrade Pillow --no-cache-dir")
+    print("   To silence: SUPPRESS_LIBRAQM_WARNING=1")
 else:
     print("✅ libraqm available - complex text shaping enabled")
 
