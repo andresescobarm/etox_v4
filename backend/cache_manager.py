@@ -23,7 +23,8 @@ class CacheManager:
         redis_host: str = "localhost",
         redis_port: int = 6379,
         redis_db:  int = 0,
-        ttl_hours: int = 24
+        ttl_hours: int = 24,
+        redis_url: Optional[str] = None,
     ):
         """
         Args:
@@ -32,14 +33,22 @@ class CacheManager:
             redis_db: Redis database number
             ttl_hours: Cache time-to-live in hours
         """
-        self. client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5
-        )
+        if redis_url:
+            self.client = redis.Redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
+        else:
+            self.client = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                db=redis_db,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
         self.ttl = timedelta(hours=ttl_hours)
         
         # Test connection
@@ -162,10 +171,12 @@ def get_cache_manager() -> CacheManager:
     global _global_cache
     if _global_cache is None:
         import os
+        redis_url = os.getenv("REDIS_URL")
         _global_cache = CacheManager(
             redis_host=os.getenv("REDIS_HOST", "localhost"),
-            redis_port=int(os. getenv("REDIS_PORT", 6379)),
+            redis_port=int(os.getenv("REDIS_PORT", 6379)),
             redis_db=int(os.getenv("REDIS_DB", 0)),
-            ttl_hours=int(os.getenv("CACHE_TTL_HOURS", 24))
+            ttl_hours=int(os.getenv("CACHE_TTL_HOURS", 24)),
+            redis_url=redis_url,
         )
     return _global_cache

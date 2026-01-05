@@ -6,13 +6,32 @@ Handles heavy workloads asynchronously.
 """
 
 import os
+from urllib.parse import urlparse
 from celery import Celery
+
+
+def _redis_db_url(redis_url: str, db_num: int) -> str:
+    """Build a Redis URL with the provided DB, preserving auth/host/port."""
+    parsed = urlparse(redis_url)
+    netloc = parsed.netloc
+    if not netloc and parsed.path:
+        # Handle redis://host:port/db without netloc parsing edge cases
+        netloc = parsed.path
+    return parsed._replace(path=f"/{db_num}", netloc=netloc).geturl()
+
+redis_url = os.getenv("REDIS_URL")
+default_broker = "redis://localhost:6379/1"
+default_backend = "redis://localhost:6379/2"
+
+if redis_url:
+    default_broker = _redis_db_url(redis_url, 1)
+    default_backend = _redis_db_url(redis_url, 2)
 
 # Create Celery app
 celery_app = Celery(
     "etos_backend",
-    broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1"),
-    backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
+    broker=os.getenv("CELERY_BROKER_URL", default_broker),
+    backend=os.getenv("CELERY_RESULT_BACKEND", default_backend),
 )
 
 # Configuration
