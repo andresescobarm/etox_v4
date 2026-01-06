@@ -139,7 +139,7 @@ def render_download_job(
                 zf.writestr(filename, img_bytes)
             
             for lang, desc_text in descriptions.items():
-                zf.writestr(f"{base_name}_{lang}_description.txt", desc_text. encode("utf-8"))
+                zf.writestr(f"{base_name}_{lang}_description.csv", desc_text. encode("utf-8"))
         
         zip_buffer.seek(0)
         zip_bytes_b64 = base64.b64encode(zip_buffer.getvalue()).decode("utf-8")
