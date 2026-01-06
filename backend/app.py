@@ -1414,7 +1414,7 @@ async def render_download(
             
                     # Save description file for this language
                     zf.writestr(
-                        f"{base_name}_{lang}_description.txt",
+                        f"{base_name}_{lang}_description.csv",
                         description_text.encode("utf-8")
                     )
         
