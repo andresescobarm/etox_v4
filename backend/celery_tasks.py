@@ -139,7 +139,16 @@ def render_download_job(
                 zf.writestr(filename, img_bytes)
             
             for lang, desc_text in descriptions.items():
-                zf.writestr(f"{base_name}_{lang}_description.csv", desc_text. encode("utf-8"))
+                # Create CSV with Spanish original and translation
+                if lang == "es":
+                    # Spanish file only has one column
+                    csv_content = f"Spanish\n{permanent_note}"
+                else:
+                    # Other languages have Spanish + Translation
+                    csv_content = f"Spanish,{lang. upper()}\n{permanent_note},{desc_text}"
+    
+                zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
+            
         
         zip_buffer.seek(0)
         zip_bytes_b64 = base64.b64encode(zip_buffer.getvalue()).decode("utf-8")
