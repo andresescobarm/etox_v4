@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 import asyncio
 from datetime import datetime
+import os
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi. responses import StreamingResponse, JSONResponse, RedirectResponse
@@ -21,13 +22,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageDraw, ImageFont, features, UnidentifiedImageError
 
-from tradufotos import translate, translate_caption, translate_with_highlight
-from user_queue import get_user_queue
-from cache_manager import get_cache_manager
+from .tradufotos import translate, translate_caption, translate_with_highlight
+from .user_queue import get_user_queue
+from .cache_manager import get_cache_manager
 
 import base64
 from celery. result import AsyncResult
-from celery_tasks import render_download_job
+from .celery_tasks import render_download_job
 
 
 # ============================================================
@@ -43,9 +44,10 @@ FONTS_DIR = BASE_DIR / "fonts"
 # ============================================================
 
 RAQM_AVAILABLE = features.check("raqm")
-if not RAQM_AVAILABLE:  
+if not RAQM_AVAILABLE and os.getenv("SUPPRESS_LIBRAQM_WARNING") != "1":
     print("⚠️  WARNING: libraqm not available.    Complex scripts may not render correctly.")
     print("   Install:    brew install libraqm fribidi harfbuzz && pip install --upgrade Pillow --no-cache-dir")
+    print("   To silence: SUPPRESS_LIBRAQM_WARNING=1")
 else:
     print("✅ libraqm available - complex text shaping enabled")
 
@@ -133,7 +135,7 @@ app.add_middleware(
 # Background health check task
 async def periodic_health_check():
     """Run health check every 10 minutes in background."""
-    from tradufotos import check_openai_health
+    from .tradufotos import check_openai_health
     
     while True: 
         try:
@@ -163,7 +165,7 @@ async def periodic_health_check():
 @app.on_event("startup")
 async def startup_event():
     """Run health check on startup and start background task."""
-    from tradufotos import check_openai_health
+    from .tradufotos import check_openai_health
     
     print("🔍 Running initial health check...")
     result = check_openai_health(max_retries=3)
@@ -329,7 +331,7 @@ def health_check():
     Health check endpoint. 
     Returns system status including OpenAI API health and queue status. 
     """
-    from user_queue import get_user_queue
+    from .user_queue import get_user_queue
     
     queue = get_user_queue(max_concurrent=10)
     
@@ -392,7 +394,7 @@ async def translate_concurrent_endpoint(request: Request):
             )
         
         # Import the concurrent function
-        from tradufotos import translate_all_concurrent
+        from .tradufotos import translate_all_concurrent
         
         # Run the concurrent translation
         results = await translate_all_concurrent(text, user_id)
@@ -1180,7 +1182,7 @@ def get_cache_stats():
     Useful for monitoring cache hit rate.
     """
     try:
-        from cache_manager import get_cache_manager
+        from .cache_manager import get_cache_manager
         cache = get_cache_manager()
         stats = cache.get_stats()
         
@@ -1650,7 +1652,7 @@ async def download_result(job_id: str):
 @app.post("/test-celery")
 async def test_celery(request:  Request):
     """Test Celery"""
-    from celery_tasks import render_download_job
+    from .celery_tasks import render_download_job
     import base64
     import io
     from PIL import Image
@@ -1695,7 +1697,11 @@ async def test_celery(request:  Request):
 
 
 # Mount static files LAST (after all API routes)
-app.mount("/ui", StaticFiles(directory="ui", html=True), name="ui")
+UI_DIR = BASE_DIR / "ui"
+if UI_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(UI_DIR), html=True), name="ui")
+else:
+    print(f"⚠️  UI directory not found: {UI_DIR}")
 
 
 
