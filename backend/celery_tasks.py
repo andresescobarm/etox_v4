@@ -154,7 +154,7 @@ def render_download_job(
                     csv_writer.writerow([permanent_note, desc_text])
                 
                 csv_content = csv_buffer.getvalue()
-                zf.writestr(f"{base_name}_{lang}_description. csv", csv_content.encode("utf-8"))
+                zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
             
         
         zip_buffer.seek(0)
