@@ -1396,28 +1396,35 @@ async def render_download(
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for filename, img_bytes in rendered_images:  
                 zf. writestr(filename, img_bytes)
-    
+            
             # ✅ ADD TRANSLATED DESCRIPTIONS (one per language)
             if permanent_note.strip():
                 for lang in all_languages:
                     if lang == "es":
                         # Keep original Spanish description
                         description_text = permanent_note
-                    else:
+                    else: 
                         # Translate description to target language
                         try: 
                             result = translate_caption(permanent_note, lang, user_ip)
-                            description_text = result.get("human", permanent_note)
-                        except Exception as e:
+                            description_text = result. get("human", permanent_note)
+                        except Exception as e: 
                             print(f"Error translating description for {lang}: {e}")
                             description_text = permanent_note  # Fallback to Spanish
-            
-                    # Save description file for this language
+    
+                    # Save description file for this language as CSV
+                    if lang == "es": 
+                        # Spanish file only has one column
+                        csv_content = f"Spanish\n{permanent_note}"
+                    else:
+                        # Other languages have Spanish + Translation
+                        csv_content = f"Spanish,{lang. upper()}\n{permanent_note},{description_text}"
+        
                     zf.writestr(
                         f"{base_name}_{lang}_description.csv",
-                        description_text.encode("utf-8")
+                        csv_content.encode("utf-8")
                     )
-        
+       
                 
         zip_buffer.seek(0)
             
@@ -1674,4 +1681,3 @@ app.mount("/ui", StaticFiles(directory="ui", html=True), name="ui")
 if __name__ == "__main__": 
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
