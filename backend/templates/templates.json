@@ -36,7 +36,8 @@
           "align": "center",
           "v_align": "bottom",
           "max_lines": 6,
-          "line_spacing": -100,
+          "line_spacing": -15,
+          "line_spacing_mode": "percentage",
           "min_line_gap_pct": 0.02,
           "max_line_gap_pct": 0.05
         }
@@ -346,9 +347,10 @@
           "align": "center",
           "v_align": "top",
           "max_lines": 6,
-          "line_spacing": -100,
-          "min_line_gap_pct":  0.05,
-          "max_line_gap_pct": 0.10
+          "line_spacing": -15,
+          "line_spacing_mode": "percentage",
+          "min_line_gap_pct":  0.02,
+          "max_line_gap_pct": 0.05
         }
       ]
     },

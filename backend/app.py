@@ -574,15 +574,28 @@ def build_spans_from_highlight_phrase(text: str, base_color: str, highlight_colo
 # LAYOUT CALCULATIONS
 # ============================================================
 
-def compute_effective_gap(line_h: int, line_spacing: int, mode: str = "legacy"):
-    if mode == "add":
+def compute_effective_gap(line_h:   int, line_spacing:  int, mode: str = "legacy"):
+    if mode == "percentage":
+        # Percentage mode:  line_spacing is a percentage (e.g., -30 = -30% overlap)
+        effective_gap = int(line_h * (line_spacing / 100.0))
+        print(f"🔍 PERCENTAGE MODE: line_h={line_h}, line_spacing={line_spacing}, effective_gap={effective_gap}")
+    elif mode == "add":  
         effective_gap = line_h + int(line_spacing)
-    else:  
+        print(f"🔍 ADD MODE: line_h={line_h}, line_spacing={line_spacing}, effective_gap={effective_gap}")
+    else:  # legacy
         effective_gap = line_h - int(line_spacing)
-    min_gap = max(int(line_h * 0.1), 0)
-    if effective_gap < min_gap:  
-        effective_gap = min_gap
+        print(f"🔍 LEGACY MODE: line_h={line_h}, line_spacing={line_spacing}, effective_gap={effective_gap}")
+    
+    # Only apply min_gap for legacy mode
+    if mode == "legacy":
+        min_gap = max(int(line_h * 0.1), 0)
+        if effective_gap < min_gap:  
+            effective_gap = min_gap
+            print(f"🔍 CLAMPED TO MIN_GAP: {min_gap}")
+
+    print(f"🔍 FINAL effective_gap={effective_gap}")
     return effective_gap
+
 
 # ============================================================
 # FIT + WRAP
@@ -632,6 +645,7 @@ def fit_text_in_box(
     template_id: str = "",
     all_caps: bool = False
 ):
+    print(f"🔥 fit_text_in_box CALLED:  font_size_mode={font_size_mode}, preferred_font_size={preferred_font_size}")
 
     """
     Returns (lines, font, line_step, total_h)
@@ -652,12 +666,14 @@ def fit_text_in_box(
             ascent, descent = font_local.getmetrics()
             max_h = ascent + descent
         return max_h
-
-    def clamp_gap(line_step_val, eff_gap_val):
-        eff_gap_val = max(eff_gap_val, int(line_step_val * min_line_gap_pct))
-        eff_gap_val = min(eff_gap_val, int(line_step_val * max_line_gap_pct))
-        eff_gap_val = max(eff_gap_val, min_gap_px)
+    def clamp_gap(line_step_val, eff_gap_val, mode: str = "legacy"):
+        # Only apply clamping for legacy mode
+        if mode == "legacy": 
+            eff_gap_val = max(eff_gap_val, int(line_step_val * min_line_gap_pct))
+            eff_gap_val = min(eff_gap_val, int(line_step_val * max_line_gap_pct))
+            eff_gap_val = max(eff_gap_val, min_gap_px)
         return eff_gap_val
+
 
     if preferred_font_size is not None and font_size_mode == "absolute":
         font_size = int(preferred_font_size)
@@ -667,18 +683,14 @@ def fit_text_in_box(
     font = ImageFont.truetype(str(font_path), size=font_size)
 
     if font_size_mode == "absolute" and preferred_font_size is not None:
+        print(f"🔥 ABSOLUTE MODE TRIGGERED!  font_size={preferred_font_size}")
         if spans:  
             words_with_color = split_spans_to_words(spans, default_color)
             lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps)
         else:
             lines = wrap_text(draw, text, font, box_w)
         line_step = measure_lines(lines, font, spans is not None)
-        eff_gap = clamp_gap(line_step, compute_effective_gap(line_step, line_spacing, line_spacing_mode))
-        # MANUAL OVERRIDE: Force tighter spacing for Template A and A.1
-        if area_id == "main_box" and template_id in ["template_A_portrait_1080x1350", "template_A1_portrait_1080x1350"]:
-            old_gap = eff_gap
-            eff_gap = 0  # Force NO gap between lines    
-            print(f"🔥 OVERRIDE TRIGGERED!  line_step={line_step}, old eff_gap={old_gap}, new eff_gap={eff_gap}")
+        eff_gap = clamp_gap(line_step, compute_effective_gap(line_step, line_spacing, line_spacing_mode), line_spacing_mode)
         total_h = line_step * len(lines) + eff_gap * max(0, len(lines) - 1)
         total_h += int(line_step * pad_factor)
         return lines, font, line_step, total_h
@@ -695,11 +707,6 @@ def fit_text_in_box(
 
         line_step = measure_lines(lines, font, spans is not None)
         eff_gap = clamp_gap(line_step, compute_effective_gap(line_step, line_spacing, line_spacing_mode))
-        # MANUAL OVERRIDE: Force tighter spacing for Template A and A.1
-        if area_id == "main_box" and template_id in ["template_A_portrait_1080x1350", "template_A1_portrait_1080x1350"]:
-            old_gap = eff_gap
-            eff_gap = 0  # Force NO gap between lines
-            print(f"🔥 OVERRIDE TRIGGERED!  line_step={line_step}, old eff_gap={old_gap}, new eff_gap={eff_gap}")
         total_h = line_step * num_lines + eff_gap * max(0, num_lines - 1)
         total_h += int(line_step * pad_factor)
 
@@ -732,9 +739,6 @@ def fit_text_in_box(
 
     line_step = measure_lines(lines, font, spans is not None)
     eff_gap = clamp_gap(line_step, compute_effective_gap(line_step, line_spacing, line_spacing_mode))
-    # MANUAL OVERRIDE: Force tighter spacing for Template A and A.1
-    if area_id == "main_box" and template_id in ["template_A_portrait_1080x1350", "template_A1_portrait_1080x1350"]:
-        eff_gap = 0  # Force NO gap between lines
     total_h = line_step * len(lines) + eff_gap * max(0, len(lines) - 1)
     total_h += int(line_step * pad_factor)
     return lines, font, line_step, total_h
@@ -860,6 +864,10 @@ def render_canvas(template, payload_data, file_bytes):
         min_line_gap_pct = float(area.get("min_line_gap_pct", 0.10))
         max_line_gap_pct = float(area.get("max_line_gap_pct", 0.18))
 
+        # 2 DEBUG LINES:
+        print(f"🔍 DEBUG: area_id={area_id}")
+        print(f"🔍 DEBUG: line_spacing={line_spacing}, line_spacing_mode={line_spacing_mode}")
+
         # Process RTL text if needed
         if is_rtl_language(lang):
             text = process_rtl_text(text, lang)
@@ -918,13 +926,17 @@ def render_canvas(template, payload_data, file_bytes):
             line_step = ascent + descent
 
         eff_gap = compute_effective_gap(line_step, line_spacing, line_spacing_mode)
-        eff_gap = max(eff_gap, int(line_step * min_line_gap_pct))
-        eff_gap = min(eff_gap, int(line_step * max_line_gap_pct))
+
+        # Only apply min/max clamping in legacy mode
+        if line_spacing_mode == "legacy":
+            eff_gap = max(eff_gap, int(line_step * min_line_gap_pct))
+            eff_gap = min(eff_gap, int(line_step * max_line_gap_pct))
+
         block_pad = int(line_step * 0.03)
         block_h = block_pad * 2 + line_step * len(lines) + eff_gap * max(0, len(lines) - 1)
         block_h = max(1, int(block_h))
         block_w = bw
-        block = Image.new("RGBA", (block_w, block_h), (0, 0, 0, 0))
+        block = Image. new("RGBA", (block_w, block_h), (0, 0, 0, 0))
         bd = ImageDraw.Draw(block)
 
         y_cursor = block_pad
@@ -1411,19 +1423,28 @@ async def render_download(
                         except Exception as e: 
                             print(f"Error translating description for {lang}: {e}")
                             description_text = permanent_note  # Fallback to Spanish
-    
+                    
                     # Save description file for this language as CSV
-                    if lang == "es": 
+                    if lang == "es":  
                         # Spanish file only has one column
-                        csv_content = f"Spanish\n{permanent_note}"
+                        output = io.StringIO()
+                        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+                        writer.writerow(["Spanish"])
+                        writer.writerow([permanent_note])
+                        csv_content = output.getvalue()
                     else:
                         # Other languages have Spanish + Translation
-                        csv_content = f"Spanish,{lang. upper()}\n{permanent_note},{description_text}"
-        
+                        output = io.StringIO()
+                        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+                        writer.writerow(["Spanish", lang. upper()])
+                        writer.writerow([permanent_note, description_text])
+                        csv_content = output.getvalue()
+
                     zf.writestr(
                         f"{base_name}_{lang}_description.csv",
                         csv_content.encode("utf-8")
                     )
+                    
        
                 
         zip_buffer.seek(0)

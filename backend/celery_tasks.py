@@ -4,6 +4,7 @@
 Celery tasks for background processing.
 """
 
+import csv
 import io
 import json
 import copy
@@ -139,15 +140,21 @@ def render_download_job(
                 zf.writestr(filename, img_bytes)
             
             for lang, desc_text in descriptions.items():
-                # Create CSV with Spanish original and translation
+                # Create properly escaped CSV
+                csv_buffer = io.StringIO()
+                csv_writer = csv.writer(csv_buffer, quoting=csv.QUOTE_MINIMAL)
+                
                 if lang == "es":
                     # Spanish file only has one column
-                    csv_content = f"Spanish\n{permanent_note}"
+                    csv_writer.writerow(["Spanish"])
+                    csv_writer. writerow([permanent_note])
                 else:
                     # Other languages have Spanish + Translation
-                    csv_content = f"Spanish,{lang. upper()}\n{permanent_note},{desc_text}"
-    
-                zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
+                    csv_writer.writerow(["Spanish", lang.upper()])
+                    csv_writer.writerow([permanent_note, desc_text])
+                
+                csv_content = csv_buffer.getvalue()
+                zf.writestr(f"{base_name}_{lang}_description. csv", csv_content.encode("utf-8"))
             
         
         zip_buffer.seek(0)
