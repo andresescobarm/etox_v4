@@ -594,15 +594,14 @@ renderBtn.addEventListener('click', async () => {
    --------------------------- */
 const LANGUAGES = [
   { name: 'Árabe', abbr: 'ar' },
-  { name: 'Alemán', abbr: 'de' },
   { name: 'Bengalí', abbr: 'bn' },
-  { name:  'Coreano', abbr: 'ko' },
+  { name: 'Holandés', abbr: 'nl' },
+  { name: 'Inglés', abbr: 'en' },
   { name: 'Francés', abbr: 'fr' },
+  { name: 'Alemán', abbr: 'de' },
   { name: 'Hebreo', abbr: 'he' },
   { name: 'Hindi', abbr: 'hi' },
-  { name: 'Holandés', abbr: 'nl' },
   { name: 'Indonesio', abbr: 'id' },
-  { name: 'Inglés', abbr: 'en' },
   { name: 'Italiano', abbr: 'it' },
   { name: 'Japonés', abbr: 'ja' },
   { name: 'Malayo', abbr: 'ms' },
@@ -626,9 +625,9 @@ function renderLanguagesGrid() {
 
   languagesGrid.innerHTML = '';
   languagesGrid.style.display = 'grid';
-  languagesGrid.style.gridTemplateColumns = 'repeat(3, 1fr))';
+  languagesGrid.style.gridTemplateColumns = 'repeat(, minmax(0, 1fr))';
   languagesGrid.style.gap = '8px 12px';
-  languagesGrid.style.alignItems = 'start';
+  languagesGrid.style.alignItems = 'center';
   languagesGrid.style.padding = '6px 0';
 
   LANGUAGES.forEach((L, idx) => {
@@ -729,98 +728,7 @@ function closeFilenameModal() {
   filenameModal.style.display = 'none';
   filenameModal.setAttribute('aria-hidden', 'true');
 }
-downloadBtn.addEventListener('click', async () => {
-  // Check if image is uploaded
-  const file = imageInput.files && imageInput.files[0];
-  if (!file) {
-    alert('Debes subir una imagen antes de descargar. Por favor, selecciona una imagen.');
-    return;
-  }
-
-  // Use simple base name
-  const baseName = 'image';
-  
-  const langs = getSelectedLanguages();
-
-  // Show progress modal immediately (no filename modal!)
-  openProgressModal();
-
-  const payload = buildPayloadFromControls();
-  const fd = new FormData();
-  const permanentNote = document.getElementById('permanentTextbox')?.value || '';
-  console.log("permanentNote value about to send:", permanentNote);
-  fd.append('permanent_note', permanentNote);
-  fd.append('template_id', templateSelect.value);
-  fd.append('payload', JSON. stringify(payload));
-  fd.append('languages', JSON.stringify(langs));
-  fd.append('base_name', baseName);
-  fd.append('image', file);
-
-  currentAbortController = new AbortController();
-  try {
-    const res = await fetch('/render-download', { method:  'POST', body: fd, signal: currentAbortController.signal });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error('Download failed: ' + txt);
-    }
-
-    const contentLength = res.headers.get('content-length');
-    const total = contentLength ? parseInt(contentLength, 10) : null;
-
-    if (!res.body) {
-      const blob = await res. blob();
-      downloadBlob(blob, baseName + '.zip');
-      closeProgressModal();
-      return;
-    }
-
-    const reader = res.body.getReader();
-    const chunks = [];
-    let received = 0;
-    if (!total) {
-      progressBar.style.width = '100%';
-      progressBar. classList.add('indeterminate');
-      progressPercent.textContent = 'Procesando...';
-    } else {
-      progressBar.classList.remove('indeterminate');
-      progressBar.style.width = '0%';
-      progressPercent.textContent = '0%';
-    }
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        chunks.push(value);
-        received += value.length;
-        if (total) {
-          const pct = Math.round((received / total) * 100);
-          progressBar.style.width = pct + '%';
-          progressPercent. textContent = pct + '%';
-        } else {
-          progressPercent.textContent = `Preparando... ${(received / 1024).toFixed(0)}KB`;
-        }
-      }
-    }
-
-    const blob = new Blob(chunks, { type: res.headers.get('content-type') || 'application/zip' });
-    progressBar.classList.remove('indeterminate');
-    progressBar.style.width = '100%';
-    progressPercent.textContent = '100%';
-    progressMessage.textContent = 'Completado — iniciando descarga...';
-    await new Promise(r => setTimeout(r, 300));
-    downloadBlob(blob, baseName + '.zip');
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      alert('Descarga cancelada.');
-    } else {
-      alert(err.message || 'Fallo en la descarga.');
-    }
-  } finally {
-    currentAbortController = null;
-    setTimeout(() => closeProgressModal(), 600);
-  }
-});
+downloadBtn.addEventListener('click', () => openFilenameModal());
 filenameCancelBtn?.addEventListener('click', (e) => { e.preventDefault(); closeFilenameModal(); });
 
 function openProgressModal() {
@@ -845,6 +753,104 @@ function validateBaseName(name) {
   if (/[\\/:\*\?"<>\|]/.test(name)) return false;
   return true;
 }
+
+filenameSaveBtn?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const file = imageInput.files && imageInput.files[0];
+  if (!file) {
+    alert('Debes subir una imagen antes de descargar. Por favor, selecciona una imagen.');
+    return;
+  }
+
+  const baseNameRaw = filenameInput.value.trim();
+  if (!validateBaseName(baseNameRaw)) {
+    alert('Por favor ingresa un nombre válido sin caracteres de ruta.');
+    filenameInput.focus();
+    return;
+  }
+  const baseName = baseNameRaw || 'image';
+  const langs = getSelectedLanguages();
+
+  closeFilenameModal();
+  openProgressModal();
+
+  const payload = buildPayloadFromControls();
+  const fd = new FormData();
+  // Add permanent note to the FormData
+  const permanentNote = document.getElementById('permanentTextbox')?.value || '';
+  console.log("permanentNote value about to send:", permanentNote);
+  fd.append('permanent_note', permanentNote);
+  fd.append('template_id', templateSelect.value);
+  fd.append('payload', JSON.stringify(payload));
+  fd.append('languages', JSON.stringify(langs));
+  fd.append('base_name', baseName);
+  fd.append('image', file);
+
+  currentAbortController = new AbortController();
+  try {
+    const res = await fetch('/render-download', { method: 'POST', body: fd, signal: currentAbortController.signal });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error('Download failed: ' + txt);
+    }
+
+    const contentLength = res.headers.get('content-length');
+    const total = contentLength ? parseInt(contentLength, 10) : null;
+
+    if (!res.body) {
+      const blob = await res.blob();
+      downloadBlob(blob, baseName + '.zip');
+      closeProgressModal();
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    if (!total) {
+      progressBar.style.width = '100%';
+      progressBar.classList.add('indeterminate');
+      progressPercent.textContent = 'Procesando...';
+    } else {
+      progressBar.classList.remove('indeterminate');
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+    }
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        received += value.length;
+        if (total) {
+          const pct = Math.round((received / total) * 100);
+          progressBar.style.width = pct + '%';
+          progressPercent.textContent = pct + '%';
+        } else {
+          progressPercent.textContent = `Preparando... ${(received / 1024).toFixed(0)}KB`;
+        }
+      }
+    }
+
+    const blob = new Blob(chunks, { type: res.headers.get('content-type') || 'application/zip' });
+    progressBar.classList.remove('indeterminate');
+    progressBar.style.width = '100%';
+    progressPercent.textContent = '100%';
+    progressMessage.textContent = 'Completado — iniciando descarga...';
+    await new Promise(r => setTimeout(r, 300));
+    downloadBlob(blob, baseName + '.zip');
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      alert('Descarga cancelada.');
+    } else {
+      alert(err.message || 'Fallo en la descarga.');
+    }
+  } finally {
+    currentAbortController = null;
+    setTimeout(() => closeProgressModal(), 600);
+  }
+});
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
