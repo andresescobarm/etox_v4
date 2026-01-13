@@ -183,7 +183,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-famil
 
 .languages-grid {
   display: grid;
-  grid-template-columns: repeat(11, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 8px 12px;
   margin-top: 10px;
   max-height: 240px;

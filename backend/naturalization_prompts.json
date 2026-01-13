@@ -11,6 +11,7 @@
     "id": "Indonesian",
     "it": "Italian",
     "ja": "Japanese",
+    "ko": "Korean",
     "ms": "Malay",
     "pl": "Polish",
     "pt": "Portuguese",
@@ -49,6 +50,8 @@
       "it": "ITALIAN:   NEVER add 'Uomo', 'Donna', or any subject word at the start of headlines unless that exact word exists in the Spanish original.  'La hija de X' = 'La figlia di X', NOT 'Donna figlia di X'.   'El hijo de X' = 'Il figlio di X', NOT 'Uomo figlio di X'.  'Giovane' not 'Jovane'.   CRITICAL: Do NOT change verb tenses.  Past tense MUST stay past tense. 'è entrata' must NOT become 'entra'.   'è rimasta' must NOT become 'rimane'.  'ha progettato' must NOT become 'progetta'.  If the Spanish uses past tense (entró, quedó, diseñó), the Italian must use past tense (è entrata, è rimasta, ha progettato). Do NOT swap synonyms unnecessarily:   'disgrazia' does not need to become 'sfortuna', 'altezza' does not need to become 'statura'.",
 
       "ja": "JAPANESE:  NEVER add '話/の物語/のニュース' at end.   Headlines are facts, not story descriptions.  Keep 'になった' transformation verbs.  Do NOT add hedging language like 'とされる' (is said to be) unless the original has 'presuntamente' or similar.  Do NOT add 'ままだ' or other unnecessary endings. CRITICAL: Do NOT change active voice to passive voice.   '呼ぶ' (calls) must NOT become '呼ばれる' (is called) — this reverses the meaning.  'X calls Y a hypocrite' must stay as 'XはYを偽善者と呼ぶ', NOT 'Yは偽善者と呼ばれる'.",
+
+      "ko": "KOREAN:  Use appropriate honorific level (해요 form for general social media). Do NOT add unnecessary context markers.  Preserve verb tenses exactly.  Translate English movie titles to Korean official titles when they exist.",
 
       "ms": "MALAY:   Translate all Spanish words.   Do not swap 'bahagia'↔'gembira' unnecessarily.  'raspberi bersalut coklat' must not become 'coklat berperisa raspberi'. Keep sentence structure natural - do not create awkward phrasings when restructuring.",
 
@@ -98,6 +101,8 @@
 
       "ja": "Do not add anything after complete verbs like 'になった' or '発見した'. Do not add 'とされる' unless original has hedging language.   Do not add 'ままだ'.   CRITICAL: Do NOT change active voice to passive voice.  'X calls Y' = 'XはYを呼ぶ', NOT 'Yは呼ばれる'.",
 
+      "ko": "KOREAN: Use simple, clear Korean.  Do NOT add hedging language (추정되다/것으로 보인다) unless original has it. Keep sentence structure natural for Korean readers.",
+
       "nl": "Do NOT swap synonyms like 'razend' to 'woedend'.",
 
       "pl": "Do NOT swap 'wzrost' to 'wysokość'.   Both mean height but keep the original choice.",
@@ -143,6 +148,8 @@
       "it": "CRITICAL:   NEVER add 'Uomo' or 'Donna' at the start.  If input is 'La figlia di X... ', output must be 'La figlia di X... ', NOT 'Donna figlia di X... '.   Check spelling: 'Giovane' is correct, 'Jovane' is wrong.  Do NOT swap 'disgrazia' to 'sfortuna'.   Do NOT swap 'altezza' to 'statura'.",
 
       "ja": "NEVER add '話' or 'の物語' at the end.  If headline ends with a verb, it is complete. Do NOT add 'とされる' (is said to be) unless the input already has hedging language.  Do NOT add 'ままだ'.   CRITICAL: Do NOT change active voice to passive voice. '呼ぶ' (calls) must NOT become '呼ばれる' (is called). 'XがYを偽善者と呼ぶ' must NOT become 'Yは偽善者と呼ばれる' — this reverses who is doing the calling.",
+
+      "ko": "KOREAN:  Preserve honorific level.  Do NOT change 다/요 endings unnecessarily. Keep proper noun translations consistent.",
 
       "ms": "Do not swap 'bahagia'↔'gembira' if the original word was appropriate. Keep natural sentence structure.",
 

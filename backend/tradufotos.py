@@ -593,6 +593,64 @@ def translate_description_internal(
             if not validated:
                 final = initial
 
+        # ✅ NORMALIZE PUNCTUATION:  Match original Spanish punctuation style
+        # If Spanish doesn't end with punctuation, remove it from translation
+        original_has_ending_punct = text.rstrip() and text.rstrip()[-1] in '.!?。！？'
+        if not original_has_ending_punct:
+            # Strip any ending punctuation that AI might have added
+            final = final.rstrip()
+            while final and final[-1] in '.!?。！？':
+                final = final[:-1].rstrip()
+
+        elapsed = time() - start_time
+        estimated_cost = estimate_cost(
+            token_tracker["input_tokens"],
+            token_tracker["output_tokens"]
+        )
+        
+        error_logger. log_cost_estimate(
+            text, token_tracker["total_tokens"], estimated_cost, user_id
+        )
+        
+        return {
+            "lang": lang,
+            "lang_name":  lang_name,
+            "initial": initial,
+            "final":  final,
+            "validated": validated,
+            "elapsed_seconds":  round(elapsed, 2),
+            "input_tokens": token_tracker["input_tokens"],
+            "output_tokens": token_tracker["output_tokens"],
+            "total_tokens": token_tracker["total_tokens"],
+            "estimated_cost_usd": round(estimated_cost, 4),
+            "error": None
+        }
+
+
+        elapsed = time() - start_time
+        estimated_cost = estimate_cost(
+            token_tracker["input_tokens"],
+            token_tracker["output_tokens"]
+        )
+        
+        error_logger.log_cost_estimate(
+            text, token_tracker["total_tokens"], estimated_cost, user_id
+        )
+        
+        return {
+            "lang": lang,
+            "lang_name": lang_name,
+            "initial": initial,
+            "final": final,
+            "validated": validated,
+            "elapsed_seconds": round(elapsed, 2),
+            "input_tokens": token_tracker["input_tokens"],
+            "output_tokens": token_tracker["output_tokens"],
+            "total_tokens": token_tracker["total_tokens"],
+            "estimated_cost_usd": round(estimated_cost, 4),
+            "error": None
+        }
+
         elapsed = time() - start_time
         estimated_cost = estimate_cost(
             token_tracker["input_tokens"],
@@ -886,7 +944,17 @@ def translate(text: str, lang: str, user_id: Optional[str] = None) -> dict:
 
         if isinstance(final, str) and final.startswith("Error: "):
             final = initial
-        
+    
+        # ✅ NORMALIZE PUNCTUATION:  Match original Spanish punctuation style
+        original_has_ending_punct = text.rstrip() and text.rstrip()[-1] in '. !?。！？'
+        if not original_has_ending_punct: 
+            final = final.rstrip()
+            while final and final[-1] in '. !?。！？':
+                final = final[:-1]. rstrip()
+            initial = initial.rstrip()
+            while initial and initial[-1] in '.!?。！？': 
+                initial = initial[:-1]. rstrip()
+
         translation_result = {"human": final, "initial": initial, "validated": validated}
         
         # ✅ CACHE THE RESULT

@@ -594,14 +594,15 @@ renderBtn.addEventListener('click', async () => {
    --------------------------- */
 const LANGUAGES = [
   { name: 'Árabe', abbr: 'ar' },
-  { name: 'Bengalí', abbr: 'bn' },
-  { name: 'Holandés', abbr: 'nl' },
-  { name: 'Inglés', abbr: 'en' },
-  { name: 'Francés', abbr: 'fr' },
   { name: 'Alemán', abbr: 'de' },
+  { name: 'Bengalí', abbr: 'bn' },
+  { name:  'Coreano', abbr: 'ko' },
+  { name: 'Francés', abbr: 'fr' },
   { name: 'Hebreo', abbr: 'he' },
   { name: 'Hindi', abbr: 'hi' },
+  { name: 'Holandés', abbr: 'nl' },
   { name: 'Indonesio', abbr: 'id' },
+  { name: 'Inglés', abbr: 'en' },
   { name: 'Italiano', abbr: 'it' },
   { name: 'Japonés', abbr: 'ja' },
   { name: 'Malayo', abbr: 'ms' },
@@ -625,9 +626,9 @@ function renderLanguagesGrid() {
 
   languagesGrid.innerHTML = '';
   languagesGrid.style.display = 'grid';
-  languagesGrid.style.gridTemplateColumns = 'repeat(, minmax(0, 1fr))';
+  languagesGrid.style.gridTemplateColumns = 'repeat(3, 1fr))';
   languagesGrid.style.gap = '8px 12px';
-  languagesGrid.style.alignItems = 'center';
+  languagesGrid.style.alignItems = 'start';
   languagesGrid.style.padding = '6px 0';
 
   LANGUAGES.forEach((L, idx) => {
@@ -728,67 +729,36 @@ function closeFilenameModal() {
   filenameModal.style.display = 'none';
   filenameModal.setAttribute('aria-hidden', 'true');
 }
-downloadBtn.addEventListener('click', () => openFilenameModal());
-filenameCancelBtn?.addEventListener('click', (e) => { e.preventDefault(); closeFilenameModal(); });
-
-function openProgressModal() {
-  progressBar.style.width = '0%';
-  progressPercent.textContent = '0%';
-  progressMessage.textContent = 'Estamos creando tu ZIP. Esto puede tardar unos segundos.';
-  progressModal.style.display = 'block';
-  progressModal.setAttribute('aria-hidden', 'false');
-}
-function closeProgressModal() {
-  progressModal.style.display = 'none';
-  progressModal.setAttribute('aria-hidden', 'true');
-}
-progressCancelBtn?.addEventListener('click', (e) => {
-  e.preventDefault();
-  if (currentAbortController) currentAbortController.abort();
-  closeProgressModal();
-});
-
-function validateBaseName(name) {
-  if (!name) return false;
-  if (/[\\/:\*\?"<>\|]/.test(name)) return false;
-  return true;
-}
-
-filenameSaveBtn?.addEventListener('click', async (e) => {
-  e.preventDefault();
+downloadBtn.addEventListener('click', async () => {
+  // Check if image is uploaded
   const file = imageInput.files && imageInput.files[0];
   if (!file) {
     alert('Debes subir una imagen antes de descargar. Por favor, selecciona una imagen.');
     return;
   }
 
-  const baseNameRaw = filenameInput.value.trim();
-  if (!validateBaseName(baseNameRaw)) {
-    alert('Por favor ingresa un nombre válido sin caracteres de ruta.');
-    filenameInput.focus();
-    return;
-  }
-  const baseName = baseNameRaw || 'image';
+  // Use simple base name
+  const baseName = 'image';
+  
   const langs = getSelectedLanguages();
 
-  closeFilenameModal();
+  // Show progress modal immediately (no filename modal!)
   openProgressModal();
 
   const payload = buildPayloadFromControls();
   const fd = new FormData();
-  // Add permanent note to the FormData
   const permanentNote = document.getElementById('permanentTextbox')?.value || '';
   console.log("permanentNote value about to send:", permanentNote);
   fd.append('permanent_note', permanentNote);
   fd.append('template_id', templateSelect.value);
-  fd.append('payload', JSON.stringify(payload));
+  fd.append('payload', JSON. stringify(payload));
   fd.append('languages', JSON.stringify(langs));
   fd.append('base_name', baseName);
   fd.append('image', file);
 
   currentAbortController = new AbortController();
   try {
-    const res = await fetch('/render-download', { method: 'POST', body: fd, signal: currentAbortController.signal });
+    const res = await fetch('/render-download', { method:  'POST', body: fd, signal: currentAbortController.signal });
     if (!res.ok) {
       const txt = await res.text();
       throw new Error('Download failed: ' + txt);
@@ -798,7 +768,7 @@ filenameSaveBtn?.addEventListener('click', async (e) => {
     const total = contentLength ? parseInt(contentLength, 10) : null;
 
     if (!res.body) {
-      const blob = await res.blob();
+      const blob = await res. blob();
       downloadBlob(blob, baseName + '.zip');
       closeProgressModal();
       return;
@@ -809,7 +779,7 @@ filenameSaveBtn?.addEventListener('click', async (e) => {
     let received = 0;
     if (!total) {
       progressBar.style.width = '100%';
-      progressBar.classList.add('indeterminate');
+      progressBar. classList.add('indeterminate');
       progressPercent.textContent = 'Procesando...';
     } else {
       progressBar.classList.remove('indeterminate');
@@ -826,7 +796,7 @@ filenameSaveBtn?.addEventListener('click', async (e) => {
         if (total) {
           const pct = Math.round((received / total) * 100);
           progressBar.style.width = pct + '%';
-          progressPercent.textContent = pct + '%';
+          progressPercent. textContent = pct + '%';
         } else {
           progressPercent.textContent = `Preparando... ${(received / 1024).toFixed(0)}KB`;
         }
@@ -851,6 +821,30 @@ filenameSaveBtn?.addEventListener('click', async (e) => {
     setTimeout(() => closeProgressModal(), 600);
   }
 });
+filenameCancelBtn?.addEventListener('click', (e) => { e.preventDefault(); closeFilenameModal(); });
+
+function openProgressModal() {
+  progressBar.style.width = '0%';
+  progressPercent.textContent = '0%';
+  progressMessage.textContent = 'Estamos creando tu ZIP. Esto puede tardar unos segundos.';
+  progressModal.style.display = 'block';
+  progressModal.setAttribute('aria-hidden', 'false');
+}
+function closeProgressModal() {
+  progressModal.style.display = 'none';
+  progressModal.setAttribute('aria-hidden', 'true');
+}
+progressCancelBtn?.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (currentAbortController) currentAbortController.abort();
+  closeProgressModal();
+});
+
+function validateBaseName(name) {
+  if (!name) return false;
+  if (/[\\/:\*\?"<>\|]/.test(name)) return false;
+  return true;
+}
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);

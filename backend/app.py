@@ -1309,6 +1309,7 @@ async def render_download(
                             if highlight_phrase. strip():
                                 result = translate_with_highlight(original_text, lang, highlight_phrase)
                                 translated_text = result. get("human", original_text)
+                                translated_text = translated_text.rstrip('.')  # ✅ REMOVE DOT
                                 entry["text"] = translated_text
                                 
                                 # Get the highlight phrase location from the LLM
@@ -1332,6 +1333,7 @@ async def render_download(
                                 # No highlight phrase - use regular translation
                                 result = translate(original_text, lang)
                                 translated_text = result.get("human", original_text)
+                                translated_text = translated_text. rstrip('.')  # ✅ REMOVE DOT
                                 entry["text"] = translated_text
 
                     
@@ -1426,27 +1428,33 @@ async def render_download(
                             print(f"Error translating description for {lang}: {e}")
                             description_text = permanent_note  # Fallback to Spanish
                     
-                    # Save description file for this language as CSV
-                    if lang == "es":  
-                        # Spanish file only has one column
-                        output = io.StringIO()
-                        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-                        writer.writerow(["Spanish"])
-                        writer.writerow([permanent_note])
-                        csv_content = output.getvalue()
+                    # Save description file for this language
+                    if lang == "es": 
+                        # Spanish CSV:  1 column with header "es"
+                        csv_buffer = io.StringIO()
+                        csv_writer = csv.writer(csv_buffer, quoting=csv. QUOTE_MINIMAL)
+                        csv_writer. writerow(["es"])
+                        csv_writer.writerow([permanent_note])
+                        csv_content = csv_buffer. getvalue()
+                        zf.writestr(f"{base_name}_{lang}_description.csv", csv_content. encode("utf-8"))
+                        
+                    elif lang == "en":
+                        # English CSV: 2 columns with headers "es" and "en"
+                        csv_buffer = io.StringIO()
+                        csv_writer = csv. writer(csv_buffer, quoting=csv.QUOTE_MINIMAL)
+                        csv_writer.writerow(["es", "en"])
+                        csv_writer.writerow([permanent_note, description_text])
+                        csv_content = csv_buffer.getvalue()
+                        zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
+                        
                     else:
-                        # Other languages have Spanish + Translation
-                        output = io.StringIO()
-                        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-                        writer.writerow(["Spanish", lang. upper()])
-                        writer.writerow([permanent_note, description_text])
-                        csv_content = output.getvalue()
-
-                    zf.writestr(
-                        f"{base_name}_{lang}_description.csv",
-                        csv_content.encode("utf-8")
-                    )
-                    
+                        # Other 22 languages:  JSON format
+                        json_data = {
+                            "es": permanent_note,
+                            lang:  description_text
+                        }
+                        json_content = json.dumps(json_data, ensure_ascii=False, indent=2)
+                        zf.writestr(f"{base_name}_{lang}_description.json", json_content.encode("utf-8"))
        
                 
         zip_buffer.seek(0)

@@ -43,6 +43,7 @@ class CacheManager:
             self.client = redis.Redis.from_url(
                 redis_url,
                 decode_responses=True,
+                max_connections=100,
                 socket_connect_timeout=5,
                 socket_timeout=5,
             )
@@ -52,6 +53,7 @@ class CacheManager:
                 port=redis_port,
                 db=redis_db,
                 decode_responses=True,
+                max_connections=100,
                 socket_connect_timeout=5,
                 socket_timeout=5,
             )
@@ -72,7 +74,7 @@ class CacheManager:
         Uses SHA256 hash to handle special characters.
         """
         raw = f"{translation_type}:{text}:{lang}"
-        hash_val = hashlib.sha256(raw.encode("utf-8")).hexdigest()[: 16]
+        hash_val = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         return f"trans:{translation_type}:{lang}:{hash_val}"
     
     def get_translation(
@@ -150,6 +152,23 @@ class CacheManager:
             print(f"🗑️  Cache invalidated: {lang} ({translation_type})")
         except Exception as e:
             print(f"⚠️  Cache invalidate error: {e}")
+
+    def clear_all_translations(self):
+        """Clear ALL cached translations."""
+        if not self. client:
+            return
+        
+        try:
+            # Find all translation cache keys
+            keys = self.client.keys("trans:*")
+            if keys:
+                self.client.delete(*keys)
+                print(f"🗑️  Cleared {len(keys)} cached translations")
+            else:
+                print("ℹ️  No cached translations to clear")
+        except Exception as e:
+            print(f"⚠️  Cache clear error: {e}")
+            
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics."""

@@ -71,19 +71,19 @@ def render_download_job(
         total_langs = len(all_languages)
         
         for lang_idx, lang in enumerate(all_languages):
-            progress = 10 + int((lang_idx / total_langs) * 70)
+            progress_start = 10 + int((lang_idx / total_langs) * 70)
             self.update_state(
                 state="PROCESSING",
-                meta={"progress": progress, "status": f"Translating to {lang}... "}
+                meta={"progress": progress_start, "status": f"Translating {lang}... {lang_idx + 1}/{total_langs}"}
             )
-            
-            lang_payload = copy.deepcopy(payload_data)
+
+            lang_payload = copy. deepcopy(payload_data)
             
             # Translate if not Spanish
             if lang != "es": 
                 for idx, entry in enumerate(lang_payload):
                     original_text = entry.get("text", "")
-                    highlight_color = entry.get("highlight_color", "")
+                    highlight_color = entry. get("highlight_color", "")
                     base_color = entry.get("color", "#FFFFFF")
                     
                     if original_text.strip():
@@ -95,6 +95,8 @@ def render_download_job(
                         else:
                             # Translate and cache
                             result = translate(original_text, lang, user_ip)
+                            translated_text = result.get("human", original_text)
+                            translated_text = translated_text.rstrip('.')  # ✅ REMOVE TRAILING DOT
                             entry["text"] = result. get("human", original_text)
                             cache. set_translation(original_text, lang, result, "headline")
                         
@@ -106,12 +108,20 @@ def render_download_job(
             canvas, _, _ = render_canvas(template, lang_payload, file_bytes)
             
             # Convert to PNG bytes
-            img_buffer = io.BytesIO()
-            canvas.save(img_buffer, format="PNG")
-            img_buffer.seek(0)
+            img_buffer = io. BytesIO()
+            canvas. save(img_buffer, format="PNG")
+            img_buffer. seek(0)
             
             filename = f"{base_name}_{lang}.png"
-            rendered_images.append((filename, img_buffer.getvalue()))
+            rendered_images. append((filename, img_buffer. getvalue()))
+            
+            # ✅ UPDATE PROGRESS AFTER COMPLETING THIS LANGUAGE
+            progress = 10 + int(((lang_idx + 1) / total_langs) * 70)
+            self.update_state(
+                state="PROCESSING",
+                meta={"progress": progress, "status": f"{progress}% complete"}
+            )
+       
         
         # Generate descriptions
         self.update_state(state="PROCESSING", meta={"progress": 85, "status": "Generating descriptions..."})
@@ -133,29 +143,41 @@ def render_download_job(
         
         # Create ZIP
         self.update_state(state="PROCESSING", meta={"progress": 95, "status": "Creating ZIP..."})
-        
+
         zip_buffer = io.BytesIO()
+        
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for filename, img_bytes in rendered_images:
                 zf.writestr(filename, img_bytes)
             
             for lang, desc_text in descriptions.items():
-                # Create properly escaped CSV
-                csv_buffer = io.StringIO()
-                csv_writer = csv.writer(csv_buffer, quoting=csv.QUOTE_MINIMAL)
-                
                 if lang == "es":
-                    # Spanish file only has one column
-                    csv_writer.writerow(["Spanish"])
+                    # Spanish CSV:  1 column with header "es"
+                    csv_buffer = io.StringIO()
+                    csv_writer = csv.writer(csv_buffer, quoting=csv.QUOTE_MINIMAL)
+                    csv_writer.writerow(["es"])
                     csv_writer. writerow([permanent_note])
-                else:
-                    # Other languages have Spanish + Translation
-                    csv_writer.writerow(["Spanish", lang.upper()])
+                    csv_content = csv_buffer. getvalue()
+                    zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
+                    
+                elif lang == "en":
+                    # English CSV: 2 columns with headers "es" and "en"
+                    csv_buffer = io.StringIO()
+                    csv_writer = csv.writer(csv_buffer, quoting=csv.QUOTE_MINIMAL)
+                    csv_writer.writerow(["es", "en"])
                     csv_writer.writerow([permanent_note, desc_text])
-                
-                csv_content = csv_buffer.getvalue()
-                zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
-            
+                    csv_content = csv_buffer.getvalue()
+                    zf.writestr(f"{base_name}_{lang}_description.csv", csv_content.encode("utf-8"))
+                    
+                else:
+                    # Other 22 languages:  JSON format
+                    json_data = {
+                        "es":  permanent_note,
+                        lang:  desc_text
+                    }
+                    json_content = json.dumps(json_data, ensure_ascii=False, indent=2)
+                    zf.writestr(f"{base_name}_{lang}_description.json", json_content.encode("utf-8"))
+              
         
         zip_buffer.seek(0)
         zip_bytes_b64 = base64.b64encode(zip_buffer.getvalue()).decode("utf-8")
