@@ -1,16 +1,12 @@
-. env
-
+.env
 __pycache__/
 *.py[cod]
+.venv/
 venv/
 env/
-
 dump.rdb
-
 celerybeat-schedule
-
-. DS_Store
-
+.DS_Store
 uploads/
 output/
-*. zip.env
+*.zip
