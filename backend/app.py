@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 from bidi.algorithm import get_display
+import arabic_reshaper
+try:
+    from pythainlp.tokenize import word_tokenize as thai_word_tokenize
+    THAI_TOKENIZER = True
+except ImportError:
+    THAI_TOKENIZER = False
+    print("⚠️  pythainlp not available - Thai word segmentation disabled")
 import csv
 import io
 import json
@@ -16,7 +23,7 @@ import asyncio
 from datetime import datetime
 import os
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends
 from fastapi. responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +32,8 @@ from PIL import Image, ImageDraw, ImageFont, features, UnidentifiedImageError
 from .tradufotos import translate, translate_caption, translate_with_highlight
 from .user_queue import get_user_queue
 from .cache_manager import get_cache_manager
+from .auth import setup_auth_routes, get_current_user
+from starlette.middleware.sessions import SessionMiddleware
 
 import base64
 from celery. result import AsyncResult
@@ -44,12 +53,20 @@ FONTS_DIR = BASE_DIR / "fonts"
 # ============================================================
 
 RAQM_AVAILABLE = features.check("raqm")
-if not RAQM_AVAILABLE and os.getenv("SUPPRESS_LIBRAQM_WARNING") != "1":
-    print("⚠️  WARNING: libraqm not available.    Complex scripts may not render correctly.")
-    print("   Install:    brew install libraqm fribidi harfbuzz && pip install --upgrade Pillow --no-cache-dir")
-    print("   To silence: SUPPRESS_LIBRAQM_WARNING=1")
+if not RAQM_AVAILABLE:
+    if os.getenv("ENVIRONMENT", "").lower() == "production":
+        raise RuntimeError(
+            "FATAL: libraqm is NOT available. "
+            "Complex scripts (Arabic, Hebrew, Thai, Hindi, etc.) will not render correctly. "
+            "Install libraqm, libharfbuzz, libfribidi and rebuild Pillow from source."
+        )
+    elif os.getenv("SUPPRESS_LIBRAQM_WARNING") != "1":
+        print("⚠️  WARNING: libraqm not available. Complex scripts may not render correctly.")
+        print("   Install: brew install libraqm fribidi harfbuzz && pip install --upgrade Pillow --no-cache-dir")
+        print("   To silence: SUPPRESS_LIBRAQM_WARNING=1")
 else:
     print("✅ libraqm available - complex text shaping enabled")
+
 
 # ============================================================
 # RTL AND COMPLEX SCRIPT DETECTION
@@ -71,15 +88,22 @@ def uses_no_space_script(lang: str) -> bool:
 
 def process_rtl_text(text: str, lang: str) -> str:
     """
-    Process text for RTL languages using the BiDi algorithm.
-    This reorders the text for proper visual display.
+    Process text for RTL languages.
+    When libraqm is available, it handles shaping + BiDi internally,
+    so we just return the text as-is (logical order).
+    Without libraqm, fall back to manual reshaping + BiDi.
     """
     if not is_rtl_language(lang):
         return text
+    if RAQM_AVAILABLE:
+        return text
     try:
+        if lang == "ar":
+            reshaped = arabic_reshaper.reshape(text)
+            return get_display(reshaped)
         return get_display(text)
     except Exception as e:
-        print(f"RTL processing error:  {e}")
+        print(f"RTL processing error: {e}")
         return text
 
 
@@ -131,6 +155,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session middleware (required for OAuth flow)
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "change-me"))
+
+# Auth routes
+setup_auth_routes(app)
 
 # Background health check task
 async def periodic_health_check():
@@ -228,6 +258,10 @@ def _spacing_between(prev_word: str, next_word: str, all_caps: bool = False) -> 
         return (0x4e00 <= code <= 0x9fff or    # CJK
                 0x3040 <= code <= 0x30ff or    # Hiragana + Katakana
                 0xac00 <= code <= 0xd7af)      # Korean
+
+    def is_thai(ch):
+        code = ord(ch)
+        return 0x0E00 <= code <= 0x0E7F         # Thai block
   
     def is_latin(ch):
         # Check if character is Latin script (includes accented characters like Ö, Á, É)
@@ -238,6 +272,10 @@ def _spacing_between(prev_word: str, next_word: str, all_caps: bool = False) -> 
         return (0x00C0 <= code <= 0x024F or    # Latin Extended-A and B (Ö, Á, É, etc.)
                 0x1E00 <= code <= 0x1EFF)      # Latin Extended Additional  
     
+    # No space between Thai tokens (Thai doesn't use spaces between words)
+    if is_thai(prev_char) or is_thai(next_char):
+        return ""
+
     # No space between two CJK characters
     if is_cjk(prev_char) and is_cjk(next_char):
         return ""
@@ -447,20 +485,31 @@ def split_graphemes(text: str) -> List[str]:
 # TEXT WRAPPING
 # ============================================================
 
-def wrap_text(draw: ImageDraw.Draw, text: str, font: ImageFont. FreeTypeFont, max_width: int):
+def wrap_text(draw: ImageDraw.Draw, text: str, font: ImageFont.FreeTypeFont, max_width: int, lang: str = ""):
     has_cjk = bool(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", text))
-    if has_cjk:
-        words = list(text)
+    has_no_space = uses_no_space_script(lang)
+
+    if has_cjk or has_no_space:
+        # For CJK and no-space scripts (Thai, Lao, Myanmar, Khmer):
+        if has_no_space and THAI_TOKENIZER and lang in ("th",):
+            # Use proper Thai word segmentation
+            words = thai_word_tokenize(text, engine="newmm")
+        elif has_no_space:
+            words = split_graphemes(text)
+        else:
+            words = list(text)
     else:
         words = text.split()
 
     if not words:
         return [""]
 
+    no_sep = has_cjk or has_no_space
+
     lines = []
     cur = words[0]
     for w in words[1:]:
-        sep = "" if has_cjk else " "
+        sep = "" if no_sep else " "
         test = cur + sep + w
         if get_text_length_shaped(draw, test, font) <= max_width:
             cur = test
@@ -471,31 +520,33 @@ def wrap_text(draw: ImageDraw.Draw, text: str, font: ImageFont. FreeTypeFont, ma
     return lines
 
 def wrap_words_with_color(
-    draw: ImageDraw.Draw, words_with_color: List[Tuple[str, str]], font: ImageFont.FreeTypeFont, max_width: int, all_caps: bool = False
+    draw: ImageDraw.Draw, words_with_color: List[Tuple[str, str]], font: ImageFont.FreeTypeFont, max_width: int, all_caps: bool = False, lang: str = ""
 ):
-    if not words_with_color:  
+    if not words_with_color:
         return [[]]
 
     # Detect CJK in any token
     has_cjk = any(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", w) for w, _ in words_with_color)
+    has_no_space = uses_no_space_script(lang)
 
-    # If CJK, expand CJK characters to per-character tokens, but keep Latin words intact
-    if has_cjk:
+    # For CJK or no-space scripts, expand to per-character/grapheme tokens
+    if has_cjk or has_no_space:
         expanded = []
-        for w, col in words_with_color: 
-            # Check if this word contains CJK
-            if re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", w):
-                # Split CJK words into individual characters
+        for w, col in words_with_color:
+            if has_cjk and re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", w):
                 for ch in w:
                     expanded.append((ch, col))
+            elif has_no_space and THAI_TOKENIZER and lang in ("th",):
+                for token in thai_word_tokenize(w, engine="newmm"):
+                    expanded.append((token, col))
+            elif has_no_space:
+                for cluster in split_graphemes(w):
+                    expanded.append((cluster, col))
             else:
-                # Keep Latin words intact
                 expanded.append((w, col))
         words_with_color = expanded
-    
 
     def line_text(tokens):
-        # Build text using the same spacing rule as join_tokens_with_spacing
         parts = []
         for idx, (w, _) in enumerate(tokens):
             parts.append(w)
@@ -512,7 +563,7 @@ def wrap_words_with_color(
         candidate = cur_line + [wcol]
         cand_text = line_text(candidate)
         if get_text_length_shaped(draw, cand_text, font) <= max_width:
-            cur_line. append(wcol)
+            cur_line.append(wcol)
         else:
             lines.append(cur_line)
             cur_line = [wcol]
@@ -645,7 +696,8 @@ def fit_text_in_box(
     max_line_gap_pct: float = 0.18,
     area_id: str = "",
     template_id: str = "",
-    all_caps: bool = False
+    all_caps: bool = False,
+    lang: str = "en"
 ):
     print(f"🔥 fit_text_in_box CALLED:  font_size_mode={font_size_mode}, preferred_font_size={preferred_font_size}")
 
@@ -688,9 +740,9 @@ def fit_text_in_box(
         print(f"🔥 ABSOLUTE MODE TRIGGERED!  font_size={preferred_font_size}")
         if spans:  
             words_with_color = split_spans_to_words(spans, default_color)
-            lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps)
+            lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps, lang=lang)
         else:
-            lines = wrap_text(draw, text, font, box_w)
+            lines = wrap_text(draw, text, font, box_w, lang=lang)
         line_step = measure_lines(lines, font, spans is not None)
         eff_gap = clamp_gap(line_step, compute_effective_gap(line_step, line_spacing, line_spacing_mode), line_spacing_mode)
         total_h = line_step * len(lines) + eff_gap * max(0, len(lines) - 1)
@@ -701,10 +753,10 @@ def fit_text_in_box(
         font = ImageFont.truetype(str(font_path), size=font_size)
         if spans:
             words_with_color = split_spans_to_words(spans, default_color)
-            lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps)
+            lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps, lang=lang)
             num_lines = len(lines)
         else:
-            lines = wrap_text(draw, text, font, box_w)
+            lines = wrap_text(draw, text, font, box_w, lang=lang)
             num_lines = len(lines)
 
         line_step = measure_lines(lines, font, spans is not None)
@@ -723,7 +775,7 @@ def fit_text_in_box(
     font = ImageFont. truetype(str(font_path), size=min_font_size)
     if spans:
         words_with_color = split_spans_to_words(spans, default_color)
-        lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps)
+        lines = wrap_words_with_color(draw, words_with_color, font, box_w, all_caps, lang=lang)
         if len(lines) > max_lines:
             truncated = lines[:max_lines]
             last_line_words = truncated[-1]
@@ -731,7 +783,7 @@ def fit_text_in_box(
             truncated[-1] = new_last_words
             lines = truncated
     else:
-        lines = wrap_text(draw, text, font, box_w)
+        lines = wrap_text(draw, text, font, box_w, lang=lang)
         if len(lines) > max_lines:
             truncated = lines[:max_lines]
             last_line = truncated[-1]
@@ -870,25 +922,19 @@ def render_canvas(template, payload_data, file_bytes):
         print(f"🔍 DEBUG: area_id={area_id}")
         print(f"🔍 DEBUG: line_spacing={line_spacing}, line_spacing_mode={line_spacing_mode}")
 
-        # Process RTL text if needed
-        if is_rtl_language(lang):
-            text = process_rtl_text(text, lang)
-            if highlight_phrase:
-                highlight_phrase = process_rtl_text(highlight_phrase, lang)
+        
+
+         # RTL note: Do NOT apply get_display() here.
+        # BiDi reordering happens once, at render time (measured_line_texts loop below).
+        # Text must stay in logical order for wrapping and span matching to work correctly.
 
         used_spans = None
         if spans:
-            # Process RTL for each span
-            if is_rtl_language(lang):
-                used_spans = []
-                for span in spans:  
-                    new_span = span.copy()
-                    new_span["text"] = process_rtl_text(span. get("text", ""), lang)
-                    used_spans.append(new_span)
-            else:
-                used_spans = spans
+            # Keep spans in logical order — no BiDi here
+            used_spans = spans
         elif highlight_color and highlight_phrase:
             used_spans = build_spans_from_highlight_phrase(text, color, highlight_color, highlight_phrase)
+
         
         lines, font, line_step, total_h = fit_text_in_box(
             draw,
@@ -909,7 +955,8 @@ def render_canvas(template, payload_data, file_bytes):
             max_line_gap_pct=max_line_gap_pct,
             area_id=area_id,
             template_id=template["id"],
-            all_caps=text_all_caps
+            all_caps=text_all_caps,
+            lang=lang
         )
 
 
@@ -917,8 +964,8 @@ def render_canvas(template, payload_data, file_bytes):
         measured_line_heights = []
         for ln in lines:
             line_text = join_tokens_with_spacing(ln, text_all_caps) if used_spans else (ln if ln else " ")
-            # If the language is RTL, reorder visually for proper rendering/measurement
-            display_line_text = get_display(line_text) if is_rtl_language(lang) else line_text
+            # Apply BiDi reordering ONCE here — the single place before rendering
+            display_line_text = process_rtl_text(line_text, lang) if is_rtl_language(lang) else line_text
             measured_line_texts.append(display_line_text)
             bbox = get_text_bbox_shaped(draw, (0, 0), display_line_text if display_line_text != "" else " ", font)
             h = int(bbox[3] - bbox[1])
@@ -938,7 +985,7 @@ def render_canvas(template, payload_data, file_bytes):
         block_h = block_pad * 2 + line_step * len(lines) + eff_gap * max(0, len(lines) - 1)
         block_h = max(1, int(block_h))
         block_w = bw
-        block = Image. new("RGBA", (block_w, block_h), (0, 0, 0, 0))
+        block = Image.new("RGBA", (block_w, block_h), (0, 0, 0, 0))
         bd = ImageDraw.Draw(block)
 
         y_cursor = block_pad
@@ -946,27 +993,62 @@ def render_canvas(template, payload_data, file_bytes):
             line_text = measured_line_texts[i]
             line_w = bd.textlength(line_text, font=font)
             align = area.get("align", "center")
-            if align == "center": 
+            if align == "center":
                 x = (block_w - line_w) // 2
             elif align == "left":
                 x = 0
             else:
                 x = block_w - line_w
-            #bbox = bd.textbbox((0, 0), line_text if line_text != "" else " ", font=font)
-            # Use consistent baseline for all lines
             y_top = int(y_cursor)
 
             if used_spans:
-                cur_x = x
-                for idx, (w, col) in enumerate(ln):
-                    sep = _spacing_between(w, ln[idx + 1][0]) if idx < len(ln) - 1 else ""
-                    print(f"🐛 SPAN:  '{w}' (len={len(w)}) + sep='{sep}' -> next:  '{ln[idx + 1][0] if idx < len(ln) - 1 else 'NONE'}'")
-                    draw_text = w + sep
-                    bd.text((cur_x, y_top), draw_text, font=font, fill=col)
-                    cur_x += bd.textlength(draw_text, font=font)
-            
+                if is_rtl_language(lang):
+                    # For RTL with spans: draw the full line as one piece using the
+                    # visually reordered text, in the base color. Then overdraw
+                    # highlighted tokens at their measured positions.
+                    # This ensures correct RTL glyph shaping across the whole line.
+                    bd.text((x, y_top), line_text, font=font, fill=color)
+
+                    # Now overdraw highlighted spans if any token has a different color
+                    full_logical = join_tokens_with_spacing(ln, text_all_caps)
+                    cursor = 0
+                    for idx, (w, col) in enumerate(ln):
+                        token_start = full_logical.find(w, cursor)
+                        if token_start == -1:
+                            token_start = cursor
+                        token_end = token_start + len(w)
+
+                        if col != color:
+                            # Measure prefix width to find x position of this token
+                            prefix = full_logical[:token_start]
+                            display_prefix = process_rtl_text(prefix, lang) if prefix else ""
+                            display_token = process_rtl_text(w, lang)
+
+                            # For RTL, position from right: prefix width gives offset from right edge
+                            prefix_w = bd.textlength(display_prefix, font=font) if display_prefix else 0
+                            token_w = bd.textlength(display_token, font=font)
+
+                            # In RTL visual order, tokens appear right-to-left
+                            # The full line starts at x, so token position is:
+                            token_x = x + (line_w - prefix_w - token_w)
+                            bd.text((token_x, y_top), display_token, font=font, fill=col)
+
+                        cursor = token_end
+                        # Skip separator
+                        if idx < len(ln) - 1:
+                            sep = _spacing_between(w, ln[idx + 1][0], text_all_caps)
+                            cursor += len(sep)
+                else:
+                    # LTR spans: draw token by token as before
+                    cur_x = x
+                    for idx, (w, col) in enumerate(ln):
+                        sep = _spacing_between(w, ln[idx + 1][0], text_all_caps) if idx < len(ln) - 1 else ""
+                        draw_text = w + sep
+                        bd.text((cur_x, y_top), draw_text, font=font, fill=col)
+                        cur_x += bd.textlength(draw_text, font=font)
+
             else:
-                # For RTL, draw the visually ordered text
+                # Plain text (no spans) — draw the visually ordered text
                 bd.text((x, y_top), measured_line_texts[i], font=font, fill=color)
 
             if i < len(lines) - 1:
@@ -1019,7 +1101,8 @@ def render_canvas(template, payload_data, file_bytes):
 async def render_preview(
     template_id: str = Form(None),
     payload: str = Form(None),
-    image: UploadFile = File(None)
+    image: UploadFile = File(None),
+    user: dict = Depends(get_current_user)
 ):
     print(f"DEBUG: template_id = {template_id}")
     print(f"DEBUG: payload = {payload}")
@@ -1207,7 +1290,8 @@ async def render_download(
     image: UploadFile = File(... ),
     languages: str = Form("[]"),
     base_name: str = Form("image"),
-    permanent_note: str = Form("")
+    permanent_note: str = Form(""),
+    user: dict = Depends(get_current_user)
 ):
     """
     Renders the image with translations for multiple languages and returns a ZIP file.
@@ -1481,7 +1565,8 @@ async def render_download_async(
     image:  UploadFile = File(... ),
     languages: str = Form("[]"),
     base_name: str = Form("image"),
-    permanent_note: str = Form("")
+    permanent_note: str = Form(""),
+    user: dict = Depends(get_current_user)
 ):
     """
     Submit a background job for rendering images with translations.
