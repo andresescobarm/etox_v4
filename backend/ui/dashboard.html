@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ETOX Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:   #1a1a2e;
+      --blue:   #2563eb;
+      --blue-light: #60a5fa;
+      --bg:     #ffffff;
+      --surface:#f8fafc;
+      --border: #e2e8f0;
+      --text:   #1e293b;
+      --muted:  #64748b;
+      --green:  #16a34a;
+      --red:    #dc2626;
+    }
+
+    body {
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--navy);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; }
+    #header-user { font-size: .85rem; color: #94a3b8; }
+    #logout-btn {
+      background: transparent;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+      padding: .3rem .85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .8rem;
+      transition: background .15s;
+    }
+    #logout-btn:hover { background: #334155; }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1.5rem 2rem 3rem;
+    }
+
+    .section-title {
+      font-size: .75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      margin: 2rem 0 .75rem;
+    }
+
+    /* ── KPI Cards ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+    }
+    .kpi-card .label {
+      font-size: .75rem;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .kpi-card .value {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--navy);
+      margin-top: .25rem;
+      line-height: 1.1;
+    }
+    .kpi-card .sub {
+      font-size: .75rem;
+      color: var(--muted);
+      margin-top: .2rem;
+    }
+
+    /* ── Bar Chart ── */
+    .chart-container {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+      overflow-x: auto;
+    }
+    .chart-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 180px;
+      min-width: 600px;
+    }
+    .chart-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+    }
+    .chart-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 160px;
+      width: 100%;
+      justify-content: center;
+    }
+    .bar {
+      flex: 1;
+      max-width: 18px;
+      border-radius: 3px 3px 0 0;
+      transition: opacity .15s;
+      position: relative;
+    }
+    .bar:hover { opacity: .75; }
+    .bar-req  { background: var(--blue); }
+    .bar-tran { background: var(--blue-light); }
+    .chart-label {
+      font-size: .55rem;
+      color: var(--muted);
+      margin-top: 4px;
+      white-space: nowrap;
+    }
+    .chart-legend {
+      display: flex;
+      gap: 1rem;
+      margin-top: .75rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    /* ── Table ── */
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--navy); color: #fff; }
+    thead th {
+      padding: .7rem 1rem;
+      text-align: left;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    tbody tr:nth-child(even) { background: var(--surface); }
+    tbody tr:hover { background: #eff6ff; }
+    td {
+      padding: .65rem 1rem;
+      font-size: .85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      background: #dbeafe;
+      color: var(--blue);
+      font-size: .7rem;
+      font-weight: 700;
+      padding: .15rem .5rem;
+      border-radius: 999px;
+    }
+
+    /* ── Language Bars ── */
+    .lang-list { display: flex; flex-direction: column; gap: .5rem; }
+    .lang-row { display: flex; align-items: center; gap: .75rem; }
+    .lang-name { font-size: .8rem; font-weight: 600; width: 140px; flex-shrink: 0; }
+    .lang-bar-wrap { flex: 1; background: var(--border); border-radius: 4px; height: 14px; }
+    .lang-bar { height: 100%; background: var(--blue); border-radius: 4px; }
+    .lang-count { font-size: .8rem; color: var(--muted); width: 50px; text-align: right; }
+
+    /* ── Recent Titles ── */
+    .recent-list { display: flex; flex-direction: column; gap: .75rem; }
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    summary {
+      padding: .75rem 1rem;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--navy);
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "▼"; font-size: .7rem; color: var(--muted); }
+    details[open] summary::after { content: "▲"; }
+    .recent-table { width: 100%; border-collapse: collapse; }
+    .recent-table th {
+      background: #f1f5f9;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: .5rem 1rem;
+      text-align: left;
+    }
+    .recent-table td {
+      padding: .5rem 1rem;
+      font-size: .82rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .recent-table tbody tr:last-child td { border-bottom: none; }
+
+    /* ── Health ── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .health-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      background: var(--surface);
+    }
+    .health-card .h-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+    .health-card .h-value { font-size: 1rem; font-weight: 700; margin-top: .25rem; }
+    .status-ok  { color: var(--green); }
+    .status-err { color: var(--red); }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .75rem;
+      margin-top: 1.5rem;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+    #refresh-btn {
+      background: var(--blue);
+      color: #fff;
+      border: none;
+      padding: .4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .8rem;
+      font-weight: 600;
+    }
+    #refresh-btn:hover { background: #1d4ed8; }
+
+    /* ── Access Denied ── */
+    #access-denied {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60vh;
+      gap: 1rem;
+      color: var(--red);
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    /* ── Loading ── */
+    .loading { color: var(--muted); font-size: .9rem; padding: 1rem 0; }
+
+    @media (max-width: 900px) {
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .health-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .kpi-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>ETOX Admin Dashboard</h1>
+  <span id="header-user">Loading…</span>
+  <button id="logout-btn" onclick="logout()">Logout</button>
+</header>
+
+<div id="access-denied">
+  <span>⛔ Access Denied</span>
+  <small style="font-size:.9rem;font-weight:400;color:var(--muted)">This area is restricted to administrators.</small>
+</div>
+
+<main id="main-content" style="display:none">
+
+  <!-- KPI Cards -->
+  <p class="section-title">Overview</p>
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="label">Total Requests</div>
+      <div class="value" id="kpi-requests">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Total Translations</div>
+      <div class="value" id="kpi-translations">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Active Users</div>
+      <div class="value" id="kpi-users">—</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Today's Requests</div>
+      <div class="value" id="kpi-today">—</div>
+      <div class="sub" id="kpi-today-sub"></div>
+    </div>
+  </div>
+
+  <!-- Daily Usage Chart -->
+  <p class="section-title">Daily Usage (last 30 days)</p>
+  <div class="chart-container">
+    <div id="daily-chart" class="chart-wrap"><p class="loading">Loading chart…</p></div>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:var(--blue)"></span>Requests</span>
+      <span><span class="legend-dot" style="background:var(--blue-light)"></span>Translations</span>
+    </div>
+  </div>
+
+  <!-- Per-User Table -->
+  <p class="section-title">Per-User Breakdown</p>
+  <div class="table-wrap">
+    <table id="users-table">
+      <thead>
+        <tr>
+          <th>User (Email)</th>
+          <th>Name</th>
+          <th>Total Requests</th>
+          <th>Total Translations</th>
+          <th>Last Active</th>
+        </tr>
+      </thead>
+      <tbody id="users-tbody"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Language Breakdown -->
+  <p class="section-title">Language Breakdown</p>
+  <div class="chart-container">
+    <div id="lang-list" class="lang-list"><p class="loading">Loading…</p></div>
+  </div>
+
+  <!-- Recent Titles -->
+  <p class="section-title">Recent Titles per User</p>
+  <div id="recent-list" class="recent-list"><p class="loading">Loading…</p></div>
+
+  <!-- System Health -->
+  <p class="section-title">System Health</p>
+  <div class="health-grid" id="health-grid">
+    <div class="health-card">
+      <div class="h-label">OpenAI API</div>
+      <div class="h-value" id="health-openai">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">Queue Slots Used</div>
+      <div class="h-value" id="health-queue">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">Last Health Check</div>
+      <div class="h-value" id="health-check">—</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <span id="last-updated">Last updated: —</span>
+    <button id="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+  </div>
+
+</main>
+
+<script>
+// ─── Language names ──────────────────────────────────────────
+const LANG_NAMES = {
+  es:"Spanish", en:"English", fr:"French", pt:"Portuguese", de:"German",
+  it:"Italian", nl:"Dutch", ru:"Russian", ja:"Japanese", ko:"Korean",
+  zh:"Chinese", ar:"Arabic", hi:"Hindi", tr:"Turkish", pl:"Polish",
+  sv:"Swedish", da:"Danish", no:"Norwegian", fi:"Finnish", he:"Hebrew",
+  th:"Thai",   id:"Indonesian", ms:"Malay",  uk:"Ukrainian", cs:"Czech",
+  ro:"Romanian", hu:"Hungarian", el:"Greek",  bn:"Bengali",  vi:"Vietnamese",
+};
+function langName(code){ return LANG_NAMES[code] || code.toUpperCase(); }
+
+// ─── Auth helpers ─────────────────────────────────────────────
+async function getMe(){
+  const r = await fetch("/auth/me", {credentials:"include"});
+  if(r.status === 401){ window.location.href="/auth/login"; throw new Error("unauthenticated"); }
+  return r.json();
+}
+async function apiFetch(url){
+  const r = await fetch(url, {credentials:"include"});
+  if(r.status === 403) throw new Error("forbidden");
+  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+function logout(){
+  fetch("/auth/logout",{method:"POST",credentials:"include"}).finally(()=>{
+    window.location.href="/auth/login";
+  });
+}
+
+// ─── Loaders ─────────────────────────────────────────────────
+async function loadStats(){
+  const d = await apiFetch("/admin/stats");
+  document.getElementById("kpi-requests").textContent    = (d.total_requests||0).toLocaleString();
+  document.getElementById("kpi-translations").textContent= (d.total_translations||0).toLocaleString();
+  document.getElementById("kpi-users").textContent       = (d.unique_users||0).toLocaleString();
+  document.getElementById("kpi-today").textContent       = (d.requests_today||0).toLocaleString();
+  document.getElementById("kpi-today-sub").textContent   = `${(d.translations_today||0).toLocaleString()} translations`;
+}
+
+async function loadDaily(){
+  const days = await apiFetch("/admin/daily?days=30");
+  const el = document.getElementById("daily-chart");
+  if(!days.length){ el.innerHTML="<p class='loading'>No data yet.</p>"; return; }
+  const maxTran = Math.max(...days.map(d=>d.total_translations), 1);
+  el.innerHTML = days.map(d=>{
+    const rh = Math.round((d.total_requests / maxTran) * 150);
+    const th = Math.round((d.total_translations / maxTran) * 150);
+    const label = d.date ? d.date.slice(5) : "";
+    return `<div class="chart-day" title="${d.date}: ${d.total_requests} req, ${d.total_translations} trans">
+      <div class="chart-bars">
+        <div class="bar bar-req"  style="height:${rh}px"></div>
+        <div class="bar bar-tran" style="height:${th}px"></div>
+      </div>
+      <div class="chart-label">${label}</div>
+    </div>`;
+  }).join("");
+}
+
+async function loadUsers(){
+  const users = await apiFetch("/admin/users");
+  const tbody = document.getElementById("users-tbody");
+  if(!users.length){ tbody.innerHTML="<tr><td colspan='5'>No data yet.</td></tr>"; return; }
+  tbody.innerHTML = users.map(u=>`
+    <tr>
+      <td>${u.email||"—"}</td>
+      <td>${u.name||"—"}</td>
+      <td><span class="badge">${(u.total_requests||0).toLocaleString()}</span></td>
+      <td>${(u.total_translations||0).toLocaleString()}</td>
+      <td>${u.last_request_date ? u.last_request_date.slice(0,19).replace("T"," ") : "—"}</td>
+    </tr>`).join("");
+}
+
+async function loadLanguages(){
+  const langs = await apiFetch("/admin/languages");
+  const el = document.getElementById("lang-list");
+  const entries = Object.entries(langs).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length){ el.innerHTML="<p class='loading'>No data yet.</p>"; return; }
+  const max = entries[0][1] || 1;
+  el.innerHTML = entries.map(([code,count])=>`
+    <div class="lang-row">
+      <div class="lang-name">${langName(code)}</div>
+      <div class="lang-bar-wrap"><div class="lang-bar" style="width:${Math.round(count/max*100)}%"></div></div>
+      <div class="lang-count">${count.toLocaleString()}</div>
+    </div>`).join("");
+}
+
+async function loadRecent(){
+  const data = await apiFetch("/admin/recent");
+  const el = document.getElementById("recent-list");
+  const entries = Object.entries(data);
+  if(!entries.length){ el.innerHTML="<p class='loading'>No data yet.</p>"; return; }
+  el.innerHTML = entries.map(([email,titles])=>`
+    <details>
+      <summary>${email} <span style="color:var(--muted);font-weight:400;font-size:.8rem">${titles.length} title(s)</span></summary>
+      <table class="recent-table">
+        <thead><tr><th>Spanish Title</th><th>Languages</th><th>Date</th></tr></thead>
+        <tbody>
+          ${titles.map(t=>`<tr>
+            <td>${t.title_es||"—"}</td>
+            <td><span class="badge">${t.num_languages||0}</span></td>
+            <td>${t.created_at ? t.created_at.slice(0,19).replace("T"," ") : "—"}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+    </details>`).join("");
+}
+
+async function loadHealth(){
+  try {
+    const h = await apiFetch("/health");
+    document.getElementById("health-openai").innerHTML =
+      h.openai_healthy
+        ? `<span class="status-ok">✅ Healthy</span>`
+        : `<span class="status-err">❌ ${h.message||"Unhealthy"}</span>`;
+    document.getElementById("health-queue").textContent =
+      h.active_slots !== undefined ? `${h.active_slots} / ${h.max_slots||10}` : "—";
+    document.getElementById("health-check").textContent =
+      h.last_check ? h.last_check.slice(0,19).replace("T"," ") : "Not checked yet";
+  } catch(e) {
+    document.getElementById("health-openai").textContent = "—";
+  }
+}
+
+// ─── Main loader ─────────────────────────────────────────────
+async function loadAll(){
+  await Promise.allSettled([
+    loadStats(),
+    loadDaily(),
+    loadUsers(),
+    loadLanguages(),
+    loadRecent(),
+    loadHealth(),
+  ]);
+  document.getElementById("last-updated").textContent =
+    "Last updated: " + new Date().toLocaleTimeString();
+}
+
+// ─── Init ────────────────────────────────────────────────────
+(async ()=>{
+  let me;
+  try { me = await getMe(); }
+  catch(e){ return; }
+
+  document.getElementById("header-user").textContent = me.email || me.sub || "User";
+
+  // Check admin access by probing a protected endpoint
+  try {
+    await apiFetch("/admin/stats");
+  } catch(e) {
+    if(e.message === "forbidden"){
+      document.getElementById("access-denied").style.display = "flex";
+      return;
+    }
+  }
+
+  document.getElementById("main-content").style.display = "block";
+  await loadAll();
+
+  // Auto-refresh every 60 seconds
+  setInterval(loadAll, 60000);
+})();
+</script>
+</body>
+</html>

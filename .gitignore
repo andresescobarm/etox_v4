@@ -10,3 +10,4 @@ celerybeat-schedule
 uploads/
 output/
 *.zip
+*.db
