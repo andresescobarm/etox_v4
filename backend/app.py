@@ -34,6 +34,15 @@ from .user_queue import get_user_queue
 from .cache_manager import get_cache_manager
 from .auth import setup_auth_routes, get_current_user
 from starlette.middleware.sessions import SessionMiddleware
+from .usage_tracker import (
+    log_request,
+    get_stats_overview,
+    get_stats_per_user,
+    get_stats_per_day,
+    get_stats_per_language,
+    get_recent_titles_per_user,
+    get_stats_per_user_per_day,
+)
 
 import base64
 from celery. result import AsyncResult
@@ -162,7 +171,24 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "ch
 # Auth routes
 setup_auth_routes(app)
 
-# Background health check task
+# ============================================================
+# ADMIN CONFIGURATION
+# ============================================================
+
+ADMIN_EMAILS: set = {
+    e.strip()
+    for e in os.getenv("ADMIN_EMAILS", "andres.escobar@upsocl.com").split(",")
+    if e.strip()
+}
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Dependency that restricts access to admin users only."""
+    if user.get("sub") not in ADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 async def periodic_health_check():
     """Run health check every 10 minutes in background."""
     from .tradufotos import check_openai_health
@@ -1542,7 +1568,20 @@ async def render_download(
        
                 
         zip_buffer.seek(0)
-            
+
+        # Log usage after successful rendering
+        try:
+            title_es = payload_data[0].get("text", "") if payload_data else ""
+            log_request(
+                user_email=user.get("sub", ""),
+                user_name=user.get("name", ""),
+                title_es=title_es,
+                languages_list=all_languages,
+                template_id=template_id,
+            )
+        except Exception as _log_err:
+            print(f"⚠️  Usage logging error: {_log_err}")
+
         # Return ZIP file as streaming response
         return StreamingResponse(
             zip_buffer,
@@ -1625,7 +1664,26 @@ async def render_download_async(
         
         # Encode image as base64 for Celery
         file_bytes_b64 = base64.b64encode(file_bytes).decode("utf-8")
-        
+
+        # Build all_languages list for logging
+        all_languages_async = ["es"]
+        for lang in selected_languages:
+            if lang != "es" and lang not in all_languages_async:
+                all_languages_async.append(lang)
+
+        # Log usage at submission time
+        try:
+            title_es_async = payload_data[0].get("text", "") if payload_data else ""
+            log_request(
+                user_email=user.get("sub", ""),
+                user_name=user.get("name", ""),
+                title_es=title_es_async,
+                languages_list=all_languages_async,
+                template_id=template_id,
+            )
+        except Exception as _log_err:
+            print(f"⚠️  Usage logging error: {_log_err}")
+
         # Submit job to Celery
         job = render_download_job.apply_async(
             args=[
@@ -1787,6 +1845,46 @@ async def test_celery(request:  Request):
             "success": False,
             "error":  str(e)
         }, status_code=500)
+
+
+# ============================================================
+# ADMIN ENDPOINTS
+# ============================================================
+
+@app.get("/admin/stats")
+async def admin_stats(_admin: dict = Depends(require_admin)):
+    """Overview KPI stats."""
+    return JSONResponse(get_stats_overview())
+
+
+@app.get("/admin/users")
+async def admin_users(_admin: dict = Depends(require_admin)):
+    """Per-user breakdown."""
+    return JSONResponse(get_stats_per_user())
+
+
+@app.get("/admin/daily")
+async def admin_daily(days: int = 30, _admin: dict = Depends(require_admin)):
+    """Daily usage for the last N days."""
+    return JSONResponse(get_stats_per_day(days=days))
+
+
+@app.get("/admin/languages")
+async def admin_languages(_admin: dict = Depends(require_admin)):
+    """Language breakdown."""
+    return JSONResponse(get_stats_per_language())
+
+
+@app.get("/admin/recent")
+async def admin_recent(_admin: dict = Depends(require_admin)):
+    """Recent titles per user."""
+    return JSONResponse(get_recent_titles_per_user())
+
+
+@app.get("/admin/daily-per-user")
+async def admin_daily_per_user(days: int = 30, _admin: dict = Depends(require_admin)):
+    """Per-user per-day stats for the last N days."""
+    return JSONResponse(get_stats_per_user_per_day(days=days))
 
 
 # Mount static files LAST (after all API routes)
