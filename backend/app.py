@@ -177,7 +177,7 @@ setup_auth_routes(app)
 
 ADMIN_EMAILS: set = {
     e.strip()
-    for e in os.getenv("ADMIN_EMAILS", "andres.escobar@upsocl.com").split(",")
+    for e in os.getenv("ADMIN_EMAILS", "andres.escobar@upsocl.com, administracion@upsocl.com, josepablo@upsocl.com, macarena@upsocl.com").split(",")
     if e.strip()
 }
 
